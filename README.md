@@ -1,4 +1,4 @@
-# ai-development-lab
+# ai-development-control-plane
 
 Control plane for AI-assisted development: Claude Code leads, GPT-5.6 Sol implements, GitHub coordinates, and the owner is involved as little as possible.
 

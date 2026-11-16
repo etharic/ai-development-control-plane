@@ -122,7 +122,7 @@
       { "hooks": [ { "type": "command", "command": "python scripts/cp.py status --hook", "timeout": 30 } ] }
     ],
     "PreToolUse": [
-      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "python scripts/guard_bash.py --project ai-development-lab", "timeout": 15 } ] }
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "python scripts/guard_bash.py --project ai-development-control-plane", "timeout": 15 } ] }
     ],
     "SessionEnd": [
       { "hooks": [ { "type": "command", "command": "python scripts/cp.py record-session --hook", "timeout": 60 } ] }

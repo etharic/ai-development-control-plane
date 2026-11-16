@@ -30,7 +30,7 @@ import claude_usage  # noqa: E402
 import statusline  # noqa: E402
 
 ROOT = Path(os.environ.get("CP_ROOT") or Path(__file__).resolve().parents[1])
-DEFAULT_PROJECT = "ai-development-lab"
+DEFAULT_PROJECT = "ai-development-control-plane"
 
 ASSIGNEES = {"claude", "gpt56", "gpt6", "owner"}
 STATUSES = {"ready", "blocked", "done", "cancelled"}

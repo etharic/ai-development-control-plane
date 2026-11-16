@@ -9,6 +9,7 @@ Agents never change GitHub or account settings (owner decision 2026-11-16). This
 4. **Secrets in commits.** Mitigated by `.gitignore` and by Claude's deny rules for `.env` and key files. Not a substitute for secret scanning.
 
 ## Owner checklist
+0. **Email privacy (do first):** enable "Keep my email addresses private" and "Block command line pushes that expose my email" (see "Commit identity" below).
 1. **Limit the ChatGPT GitHub app to specific repositories.** GitHub → Settings → Applications → Installed GitHub Apps → ChatGPT (connector) → Repository access → *Only select repositories*: `ai-development-lab` plus any project repo deliberately delegated. Leave production repos out unless a project needs GPT-5.6 there.
 2. **Protect `main` in each repository** (Settings → Branches or Rules → Rulesets):
    - require a pull request before merging;
@@ -24,6 +25,19 @@ Agents never change GitHub or account settings (owner decision 2026-11-16). This
    Then, via a reviewed PR, remove the `main` push deny rules from `.claude/settings.json`, drop `main` from this repository's `protected_branches` and from the baseline `PROTECTED` set in `scripts/guard_bash.py`.
 
 6. **Optional, strengthens agent merges:** give GPT-5.6 its own GitHub identity (a machine user or GitHub App restricted to delegated repositories) so its reviews are authenticated rather than attested. Then the merge guard can also require the reviewer's GitHub login.
+
+## Commit identity (public repository)
+Every commit in this repository is public forever: GitHub keeps `refs/pull/N/head` for every PR, even after branches are deleted. Commits must use the noreply identity `etharic <331996485+etharic@users.noreply.github.com>`.
+- **Claude:** the canonical checkout sets the identity in its local git config.
+- **GPT-5.6:** `AGENTS.md` requires an explicit author and committer on every commit made through the connector.
+- **GitHub web merges** use the account's email setting. The owner must enable, in GitHub → Settings → Emails, **"Keep my email addresses private"** and **"Block command line pushes that expose my email"**. These are account-level settings only the owner can change. Until then, merges on GitHub can record the personal email; don't merge on this repository before they're on.
+- Incident 2026-11-16: GPT-5.6's commit `92be7ed` (public PR #2) was authored with the personal email because the connector used the account default. `refs/pull/2/head` keeps it reachable. Only GitHub Support can purge a PR ref; the owner may request it.
+
+## Permission-prompt audit (W-0013)
+Rule: a prompt is justified only when a reasonable owner might answer No.
+- **`gh api`:** read-only calls (GET/HEAD, read-only GraphQL queries) are routine inspection and should not prompt. `scripts/gh_api_guard.py` classifies them and fails closed: fields or `--input` without an explicit GET, method overrides, other hosts, GraphQL mutations, and unknown flags all ask. Tests: `tests/test_gh_api_guard.py`, including the exact read-only calls that prompted the owner during W-0005 to W-0001. **Pending owner authorization:** moving `Bash(gh api *)` from ask to allow, so the classifier decides. Claude Code's safety classifier refused to make that relaxation on the strength of a work item alone. Until then, the ask rule still prompts for every `gh api`, and the hook adds a reason to non-read calls.
+- **`gh alias`, `gh extension`:** added to ask. They create indirect commands the hook can't see.
+- **Every other ask rule was reviewed and kept:** merges, `gh repo create`, CI reruns and dispatch, releases and publishing, deploy and infrastructure CLIs, branch deletion, hard resets and cleans, discarding changes, tags, history rewriting, stash drops, destructive DB resets, `find -delete/-exec`, copying or moving to absolute or home paths, and edits to `.claude/` or `.github/`. Each is consequential or destructive enough that a reasonable owner might decline.
 
 ## Already in the repository
 - `.claude/settings.json` (Claude Code permissions; rules are evaluated deny → ask → allow, so a specific `ask`/`deny` such as `gh api *` or `gh repo delete *` wins over a broad `allow`; `tests/test_guard.py` `PrecedenceTest` pins the expected decision for representative commands):
