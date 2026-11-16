@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.pem
+*.key
+*.sqlite3
+*.db
+.claude/settings.local.json
+*.tmp
