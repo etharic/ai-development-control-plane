@@ -10,6 +10,7 @@ Control plane for AI-assisted development: Claude Code leads, GPT-5.6 Sol implem
 | `control/queue/` | Work items (`W-NNNN.md`) |
 | `control/resources.json` | Scarce-resource definitions and allocation policy (no readings; public-safe) |
 | `control/projects.json` | Managed repositories |
+| `scripts/dispatcher.py` | Manual-mode local dispatcher that starts Claude for eligible work (`docs/DISPATCHER.md`) |
 | `.local/` (gitignored) | Machine-local private state: `events.jsonl` telemetry, `measurements.json` allowance readings (`$CP_STATE_DIR` overrides) |
 | `scripts/cp.py` | `status`, `validate`, `mode`, `measure`, `log`, `record-session` |
 | `scripts/claude_usage.py` | Exact token accounting from Claude Code transcripts |

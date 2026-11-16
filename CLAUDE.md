@@ -9,6 +9,8 @@ You are the technical lead and principal engineer. GPT-5.6 Sol (ChatGPT) is your
 4. Keep going autonomously through routine decisions. Stop only for product ambiguity, Red actions, credentials, or an unresolvable environment blocker. Batch any questions for the owner into one message.
 5. Before you finish, update item status and Result sections, then `python scripts/cp.py validate` and commit. Unfinished work needs enough in the item for the next session to resume it.
 
+If the session was started by the dispatcher (`docs/DISPATCHER.md`), you run in `dontAsk` mode: a denied permission means stop that piece of work and record it, never work around it.
+
 ## Allocation (thresholds experimental)
 `python scripts/cp.py mode`. SPEND/HARVEST: do more yourself and pull queue work forward. CONSERVE: lead, review, delegate. UNKNOWN: act as BALANCED. Never invent a percentage and never create filler work. When the owner reports `/usage`, record it: `python scripts/cp.py measure --weekly-used N --weekly-reset ISO [--five-hour-used N --five-hour-reset ISO]`. When the status line has data: `python scripts/cp.py measure --from-statusline`.
 
