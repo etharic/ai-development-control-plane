@@ -1,0 +1,57 @@
+{
+  "schema_version": 3,
+  "rules": "Values are real measurements or null. Claude percentages come only from the Claude Code status line payload or the owner reading /usage; never from token counts. Token consumption is recorded separately in telemetry/events.jsonl.",
+  "resources": {
+    "claude_weekly": {
+      "scope": "global",
+      "kind": "renewable",
+      "unit": "percent_used",
+      "used_percent": null,
+      "resets_at": null,
+      "measured_at": null,
+      "source": null,
+      "freshness_minutes": 360,
+      "note": "The binding perishable allowance. Shared by all Claude surfaces."
+    },
+    "claude_five_hour": {
+      "scope": "global",
+      "kind": "renewable",
+      "unit": "percent_used",
+      "used_percent": null,
+      "resets_at": null,
+      "measured_at": null,
+      "source": null,
+      "freshness_minutes": 30,
+      "note": "Pacing constraint only; capacity unused in one window is bounded by the weekly limit."
+    },
+    "github_actions": {
+      "scope": "global",
+      "kind": "renewable",
+      "unit": "included_minutes",
+      "used": null,
+      "measured_at": null,
+      "source": null,
+      "note": "Allowance and per-OS minute multipliers per the owner's current GitHub plan; read from GitHub billing. Windows/macOS runners consume the allowance faster than Linux."
+    },
+    "owner_attention": {
+      "scope": "global",
+      "kind": "human",
+      "unit": "weighted_points",
+      "note": "Derived from telemetry: owner_prompts in session events (Claude, automatic) plus intervention events (weight: 1 prompt/click, 2 short input, 5 setup/auth, 10 manual testing, 20 major workflow)."
+    },
+    "chatgpt_gpt56": {
+      "scope": "global",
+      "kind": "capacity",
+      "unit": "owner_invocations",
+      "note": "Compute is abundant; the scarce part is the owner turn needed to start each package. Counted as owner_prompts reported in PR bodies."
+    }
+  },
+  "allocation_policy": {
+    "status": "experimental",
+    "evidence": "none yet; owner decision 2026-11-16 to treat as defaults pending observations",
+    "spend_gap_points": 15,
+    "conserve_gap_points": 15,
+    "harvest_window_hours": 36,
+    "harvest_min_remaining_percent": 10
+  }
+}

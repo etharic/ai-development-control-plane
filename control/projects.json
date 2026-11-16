@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "projects": {
+    "ai-development-lab": {
+      "repository": "etharic/ai-development-lab",
+      "role": "control plane and experiment lab",
+      "production": false,
+      "protected_branches": ["main"]
+    }
+  }
+}
