@@ -1,3 +1,1 @@
 * text=auto eol=lf
-# Append-only telemetry: concurrent appends merge as a union instead of conflicting.
-telemetry/*.jsonl merge=union

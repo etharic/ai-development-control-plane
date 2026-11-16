@@ -31,7 +31,7 @@ Red-Actions: none
 Otherwise omit the block entirely. Claude's merge guard treats it as your signed attestation for that exact head, and a later push invalidates it.
 
 ## Do not
-- Edit `control/`, `telemetry/`, doctrine or scripts unless the work item says so. Claude owns queue status and telemetry.
+- Edit `control/`, doctrine or scripts unless the work item says so. Claude owns queue status and telemetry (telemetry is machine-local, not in the repository).
 - Push to `main` or any branch you did not create; merge; enable auto-merge; delete branches.
 - Add or trigger GitHub Actions unless the item requires remote/platform proof.
 - Touch repositories not listed in `control/projects.json`, or production repositories for experiments.

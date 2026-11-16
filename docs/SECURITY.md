@@ -18,7 +18,7 @@ Agents never change GitHub or account settings (owner decision 2026-11-16). This
 3. **Enable secret scanning and push protection** where available (Settings → Code security).
 4. **Keep Actions conservative:** Settings → Actions → General → require approval for workflows from outside collaborators. Set a spending limit of $0 so overage is impossible.
 5. **When enabling direct operational commits** (owner decision 1, "eventually"):
-   - **Option A (simplest):** let only Claude's local git push to `main`. Add a ruleset that requires PRs for everything except paths `control/queue/**`, `control/resources.json`, `telemetry/**`, `STATE.md`. GitHub rulesets support file-path restrictions on some plans; if not available on yours, use option B.
+   - **Option A (simplest):** let only Claude's local git push to `main`. Add a ruleset that requires PRs for everything except paths `control/queue/**`, `STATE.md`. GitHub rulesets support file-path restrictions on some plans; if not available on yours, use option B.
    - **Option B:** keep `main` PR-only and let operational state ride along in Claude's next PR.
 
    Then, via a reviewed PR, remove the `main` push deny rules from `.claude/settings.json`, drop `main` from this repository's `protected_branches` and from the baseline `PROTECTED` set in `scripts/guard_bash.py`.

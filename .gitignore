@@ -7,4 +7,6 @@ __pycache__/
 *.sqlite3
 *.db
 .claude/settings.local.json
+# machine-local private operational state (telemetry, allowance readings)
+.local/
 *.tmp

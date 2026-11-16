@@ -156,8 +156,8 @@ class ControlStateTests(unittest.TestCase):
         for rel in ("control/resources.json", "control/projects.json", "control/queue/_TEMPLATE.md"):
             (self.root / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(REPO / rel, self.root / rel)
-        (self.root / "telemetry").mkdir()
-        (self.root / "telemetry" / "events.jsonl").write_text("", encoding="utf-8")
+        (self.root / ".local").mkdir()
+        (self.root / ".local" / "events.jsonl").write_text("", encoding="utf-8")
 
     def item(self, iid, **fields):
         meta = {"id": iid, "title": "t", "assignee": "gpt56", "status": "ready", "priority": "2",
@@ -185,6 +185,25 @@ class ControlStateTests(unittest.TestCase):
         (self.root / "control" / "queue" / "W-0001.md").rename(self.root / "control" / "queue" / "W-0003.md")
         self.assertTrue(any("filename" in e for e in cp.validate(self.root)))
 
+    def test_committed_resources_must_not_carry_measurements(self):
+        res = json.loads((self.root / "control/resources.json").read_text(encoding="utf-8"))
+        res["resources"]["claude_weekly"].update(used_percent=40, measured_at=NOW.isoformat(),
+                                                 source="claude-code-statusline")
+        (self.root / "control/resources.json").write_text(json.dumps(res), encoding="utf-8")
+        self.assertTrue(any("must be null in the repository" in e for e in cp.validate(self.root)))
+
+    def test_fresh_checkout_without_local_state_is_valid(self):
+        (self.root / ".local" / "events.jsonl").unlink()
+        self.assertEqual(cp.validate(self.root), [])
+
+    def test_state_dir_override(self):
+        other = self.root / "elsewhere"
+        os.environ["CP_STATE_DIR"] = str(other)
+        self.addCleanup(os.environ.pop, "CP_STATE_DIR", None)
+        with redirect_stdout(io.StringIO()):
+            cp.main(["--root", str(self.root), "log", "note", "--note", "x"])
+        self.assertTrue((other / "events.jsonl").exists())
+
     def test_rejects_estimated_percentage(self):
         res = json.loads((self.root / "control/resources.json").read_text(encoding="utf-8"))
         res["resources"]["claude_weekly"].update(used_percent=40, measured_at=NOW.isoformat(), source="token-estimate")
@@ -196,23 +215,25 @@ class ControlStateTests(unittest.TestCase):
             cp.main(["--root", str(self.root), "log", "intervention", "--weight", "5", "--category", "setup", "--note", "x"])
             cp.main(["--root", str(self.root), "measure", "--weekly-used", "42", "--weekly-reset", "2026-11-20T08:00:00+00:00"])
         self.assertEqual(cp.validate(self.root), [])
-        res = json.loads((self.root / "control/resources.json").read_text(encoding="utf-8"))
+        committed = json.loads((self.root / "control/resources.json").read_text(encoding="utf-8"))
+        self.assertIsNone(committed["resources"]["claude_weekly"]["used_percent"])  # repo stays public-safe
+        res = cp.load_resources(self.root)
         self.assertEqual(res["resources"]["claude_weekly"]["used_percent"], 42)
         self.assertEqual(res["resources"]["claude_weekly"]["source"], "owner-usage-command")
-        lines = (self.root / "telemetry/events.jsonl").read_text(encoding="utf-8").splitlines()
+        lines = (self.root / ".local/events.jsonl").read_text(encoding="utf-8").splitlines()
         self.assertEqual([json.loads(l)["type"] for l in lines], ["intervention", "measurement"])
 
     def test_invalid_event_is_refused(self):
         with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()):
             cp.main(["--root", str(self.root), "log", "work_item", "--item", "bad", "--outcome", "done"])
-        self.assertEqual((self.root / "telemetry/events.jsonl").read_text(encoding="utf-8"), "")
+        self.assertEqual((self.root / ".local/events.jsonl").read_text(encoding="utf-8"), "")
 
     def test_record_session_from_transcript(self):
         t = self.root / "s.jsonl"
         write_lines(t, [human("go"), assistant("m1", 9)])
         with redirect_stdout(io.StringIO()):
             cp.main(["--root", str(self.root), "record-session", "--transcript", str(t), "--session-id", "s1"])
-        ev = json.loads((self.root / "telemetry/events.jsonl").read_text(encoding="utf-8"))
+        ev = json.loads((self.root / ".local/events.jsonl").read_text(encoding="utf-8"))
         self.assertEqual((ev["type"], ev["owner_prompts"], ev["tokens"]["output_tokens"]), ("session", 1, 9))
         self.assertEqual(cp.validate(self.root), [])
 
@@ -262,8 +283,6 @@ class InstallProjectTest(unittest.TestCase):
             (self.lab / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(REPO / rel, self.lab / rel)
         shutil.copytree(REPO / "scripts", self.lab / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
-        (self.lab / "telemetry").mkdir()
-        (self.lab / "telemetry" / "events.jsonl").write_text("", encoding="utf-8")
         reg = json.loads((REPO / "control/projects.json").read_text(encoding="utf-8"))
         reg["projects"]["fixture"] = {"repository": "o/fixture", "role": "test", "production": True,
                                       "protected_branches": ["main", "stable"]}

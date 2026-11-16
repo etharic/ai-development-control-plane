@@ -2,6 +2,10 @@
 """Control-plane tool: validate state, print status, compute allocation mode,
 record measurements/telemetry. Standard library only.
 
+Private operational data (telemetry events, Claude allowance readings) lives in a machine-local,
+gitignored state directory: $CP_STATE_DIR, default <root>/.local/. The repository is public-safe:
+control/resources.json holds only resource definitions and policy, never measurements.
+
     python scripts/cp.py status            # what to do next (SessionStart hook)
     python scripts/cp.py validate          # integrity check; non-zero on error
     python scripts/cp.py mode              # Claude allocation mode + reasoning
@@ -56,6 +60,44 @@ def load_json(root: Path, rel: str):
     return json.loads((root / rel).read_text(encoding="utf-8"))
 
 
+MEASUREMENT_FIELDS = ("used_percent", "resets_at", "measured_at", "source", "used")
+
+
+def state_dir(root: Path) -> Path:
+    """Machine-local, gitignored home of private operational data."""
+    env = os.environ.get("CP_STATE_DIR")
+    return Path(env) if env else root / ".local"
+
+
+def events_path(root: Path) -> Path:
+    return state_dir(root) / "events.jsonl"
+
+
+def measurements_path(root: Path) -> Path:
+    return state_dir(root) / "measurements.json"
+
+
+def load_resources(root: Path) -> dict:
+    """Committed definitions/policy overlaid with the local measurement readings."""
+    res = load_json(root, "control/resources.json")
+    try:
+        local = json.loads(measurements_path(root).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        local = {}
+    for name, reading in (local.get("resources") or {}).items():
+        if name in (res.get("resources") or {}):
+            res["resources"][name].update({k: v for k, v in reading.items() if k in MEASUREMENT_FIELDS})
+    return res
+
+
+def committed_measurements(res: dict) -> list[str]:
+    """The public repository must not carry measurement values."""
+    return [f"control/resources.json: resources.{n}.{k} must be null in the repository; readings belong in "
+            f"the local state dir (cp.py measure)"
+            for n, r in (res.get("resources") or {}).items() for k in MEASUREMENT_FIELDS
+            if r.get(k) is not None]
+
+
 def parse_item(path: Path) -> tuple[dict, str]:
     text = path.read_text(encoding="utf-8")
     m = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n?(.*)$", text, re.S)
@@ -88,9 +130,9 @@ def load_queue(root: Path) -> tuple[list[dict], list[str]]:
 
 def load_events(root: Path) -> tuple[list[dict], list[str]]:
     events, errors = [], []
-    p = root / "telemetry" / "events.jsonl"
+    p = events_path(root)
     if not p.exists():
-        return events, ["missing telemetry/events.jsonl"]
+        return events, []  # no local telemetry yet (fresh checkout)
     for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
         if not line.strip():
             continue
@@ -209,8 +251,9 @@ def validate_projects(reg: dict) -> list[str]:
 def validate(root: Path) -> list[str]:
     errors = []
     try:
-        res = load_json(root, "control/resources.json")
-        errors += validate_resources(res)
+        committed = load_json(root, "control/resources.json")
+        errors += committed_measurements(committed)
+        errors += validate_resources(load_resources(root))
     except (OSError, ValueError) as e:
         errors.append(f"control/resources.json: {e}")
     try:
@@ -333,7 +376,7 @@ def cmd_validate(root: Path) -> int:
 
 
 def cmd_mode(root: Path) -> int:
-    res = load_json(root, "control/resources.json")
+    res = load_resources(root)
     lim = current_limits(res)
     mode, reason = allocation_mode(lim["claude_weekly"], res["allocation_policy"],
                                    reset_hint=lim.get("claude_weekly_reset_hint"))
@@ -358,7 +401,7 @@ def cmd_status(root: Path, hook: bool, project: str | None = None) -> int:
     dirty = [l[3:] for l in git(root, "status", "--porcelain").splitlines()]
     lines.append(f"branch: {branch}" + (f" | uncommitted: {', '.join(dirty[:6])}" + (" ..." if len(dirty) > 6 else "") if dirty else ""))
     try:
-        res = load_json(root, "control/resources.json")
+        res = load_resources(root)
         lim = current_limits(res, now=now)
         mode, reason = allocation_mode(lim["claude_weekly"], res["allocation_policy"], now,
                                        lim.get("claude_weekly_reset_hint"))
@@ -399,13 +442,14 @@ def append_event(root: Path, event: dict) -> None:
     errs = validate_events([dict(event, _line="new")])
     if errs:
         raise SystemExit("refusing to write invalid event: " + "; ".join(errs))
-    with (root / "telemetry" / "events.jsonl").open("a", encoding="utf-8", newline="\n") as f:
+    path = events_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(event, separators=(",", ":")) + "\n")
 
 
 def cmd_measure(root: Path, args) -> int:
-    path = root / "control" / "resources.json"
-    res = json.loads(path.read_text(encoding="utf-8"))
+    res = load_resources(root)
     readings = {}
     if args.from_statusline:
         try:
@@ -437,7 +481,12 @@ def cmd_measure(root: Path, args) -> int:
     errs = validate_resources(res)
     if errs:
         raise SystemExit("; ".join(errs))
-    path.write_text(json.dumps(res, indent=2) + "\n", encoding="utf-8", newline="\n")
+    local = {"resources": {n: {k: res["resources"][n].get(k) for k in MEASUREMENT_FIELDS
+                               if res["resources"][n].get(k) is not None}
+                           for n in CLAUDE_LIMITS if res["resources"][n].get("used_percent") is not None}}
+    path = measurements_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(local, indent=2) + "\n", encoding="utf-8", newline="\n")
     print("recorded: " + ", ".join(f"{n}={v[0]}%" for n, v in readings.items()))
     return 0
 

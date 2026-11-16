@@ -1,6 +1,6 @@
 {
   "schema_version": 3,
-  "rules": "Values are real measurements or null. Claude percentages come only from the Claude Code status line payload or the owner reading /usage; never from token counts. Token consumption is recorded separately in telemetry/events.jsonl.",
+  "rules": "Definitions and policy only; this file is public. Real readings (Claude percentages from the status line or the owner's /usage, never from token counts) are recorded by `cp.py measure` in the machine-local state dir ($CP_STATE_DIR, default .local/), as is telemetry.",
   "resources": {
     "claude_weekly": {
       "scope": "global",

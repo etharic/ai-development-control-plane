@@ -48,7 +48,7 @@ FLAGS_WITH_VALUE = {"-R", "--repo", "-t", "--subject", "-b", "--body", "-F", "--
                     "-A", "--author-email", "--match-head-commit"}
 GOOD_CHECK = {"SUCCESS", "NEUTRAL", "SKIPPED"}
 AGENT_TRAILER = re.compile(r"^Agent:\s*(\S+)\s*$", re.M)
-OPERATIONAL_PATHS = ("control/queue/*", "telemetry/*", "STATE.md", ".ai/STATE.md")
+OPERATIONAL_PATHS = ("control/queue/*", "STATE.md", ".ai/STATE.md")
 
 
 def commit_files(repo: str, oid: str) -> list[str] | None:
