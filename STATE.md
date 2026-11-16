@@ -14,7 +14,7 @@ Run the Claude-led, GPT-5.6-assisted development control plane, then manage real
 
 ## Durable decisions (2026-11-16, owner)
 1. Operational state may eventually be committed directly; doctrine and scripts need reviewed PRs.
-2. No unattended or scheduled Claude execution for now.
+2. No unattended or scheduled Claude execution, **amended 2026-11-16**: the owner may run the local dispatcher in manual mode (`docs/DISPATCHER.md`); it starts Claude in `dontAsk` permission mode only, never answers prompts, and is not installed as a scheduled task.
 3. Exact token telemetry from transcripts. Allowance percentage comes only from real measurement and is never inferred from tokens.
 4. Agents prepare security recommendations; only the owner changes GitHub/account settings.
 5. Old experiment branches are preserved.

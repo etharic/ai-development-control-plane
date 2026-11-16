@@ -99,7 +99,10 @@ def committed_measurements(res: dict) -> list[str]:
 
 
 def parse_item(path: Path) -> tuple[dict, str]:
-    text = path.read_text(encoding="utf-8")
+    return parse_item_text(path.read_text(encoding="utf-8"))
+
+
+def parse_item_text(text: str) -> tuple[dict, str]:
     m = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n?(.*)$", text, re.S)
     if not m:
         raise ValueError("missing --- frontmatter ---")
@@ -434,6 +437,15 @@ def cmd_status(root: Path, hook: bool, project: str | None = None) -> int:
         if who in by:
             lines.append(f" {who}:")
             lines += by[who]
+    try:  # surface dispatcher runs that stopped on an owner permission (W-0015)
+        dstate = json.loads((state_dir(root) / "dispatcher" / "state.json").read_text(encoding="utf-8"))
+        blocked = [k for k, v in (dstate.get("handled") or {}).items()
+                   if v.get("outcome") == "blocked" and not v.get("acknowledged")]
+        if blocked:
+            lines.append(f"!! dispatcher: {len(blocked)} run(s) stopped on an owner permission: {', '.join(blocked[:4])}"
+                         " - `python scripts/dispatcher.py status`")
+    except (OSError, ValueError):
+        pass
     print("\n".join(lines))
     return 0
 
