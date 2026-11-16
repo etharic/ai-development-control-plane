@@ -192,12 +192,17 @@ def validate_events(events: list[dict]) -> list[str]:
 
 
 def validate_projects(reg: dict) -> list[str]:
-    """Each project must declare protected_branches: the push guard enforces exactly this list."""
+    """protected_branches (enforced by the push guard) and agent_merge (qualified merges, non-production only)."""
     errors = []
     for name, p in (reg.get("projects") or {}).items():
         pb = p.get("protected_branches") if isinstance(p, dict) else None
         if not isinstance(pb, list) or not pb or not all(isinstance(b, str) and b.strip() for b in pb):
             errors.append(f"control/projects.json: {name}: protected_branches must be a non-empty list of branch names/globs")
+        if isinstance(p, dict) and "agent_merge" in p:
+            if not isinstance(p["agent_merge"], bool):
+                errors.append(f"control/projects.json: {name}: agent_merge must be true or false")
+            elif p["agent_merge"] and p.get("production") is not False:
+                errors.append(f"control/projects.json: {name}: agent_merge requires production: false")
     return errors
 
 

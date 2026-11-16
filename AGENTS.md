@@ -18,6 +18,18 @@ You are the implementation workforce and an independent reviewer. Claude Code is
    - proposed follow-up items for Claude.
 6. Reply to the owner in a few lines: item, PR link, verified/unverified, anything that needs the owner. If no item is eligible, say so in one line.
 
+## When asked to review a PR
+Review the diff at its current head against the work item. Post the result as a PR review or comment: findings by severity with file:line references, and what you verified versus only inspected. Only when you recommend merging, the PR's verification passed (yours or reported representative runs), its acceptance criteria are met, it contains no Red action, and you authored none of its non-operational commits, end the review with this block, each line exactly as shown:
+```
+Merge-Recommendation: merge
+Reviewer-Agent: gpt-5.6-sol
+Reviewed-Head: <full 40-character head sha you reviewed>
+Verification: passed
+Acceptance: met
+Red-Actions: none
+```
+Otherwise omit the block entirely. Claude's merge guard treats it as your signed attestation for that exact head, and a later push invalidates it.
+
 ## Do not
 - Edit `control/`, `telemetry/`, doctrine or scripts unless the work item says so. Claude owns queue status and telemetry.
 - Push to `main` or any branch you did not create; merge; enable auto-merge; delete branches.

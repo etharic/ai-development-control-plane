@@ -88,7 +88,8 @@ class SettingsTest(unittest.TestCase):
                      "Read(~/.ssh/**)", "Read(~/.git-credentials)", "Edit(./.git/**)"]:
             self.assertIn(rule, deny)
         ask = set(self.perms["ask"])
-        for rule in ["Bash(gh pr merge *)", "Bash(gh release create *)", "Bash(npm publish*)",
+        self.assertNotIn("Bash(gh pr merge *)", ask)  # merge policy lives in merge_guard (W-0007)
+        for rule in ["Bash(gh release create *)", "Bash(npm publish*)",
                      "Bash(cargo publish*)", "Bash(git branch -D *)", "Edit(./.claude/**)"]:
             self.assertIn(rule, ask)
 
@@ -124,7 +125,8 @@ class PrecedenceTest(unittest.TestCase):
     def test_specific_rules_beat_broad_allows(self):
         perms = json.loads((REPO / ".claude" / "settings.json").read_text(encoding="utf-8"))["permissions"]
         table = {
-            "gh pr create --draft --fill": "allow", "gh pr view 4": "allow", "gh pr merge 4 --squash": "ask",
+            "gh pr create --draft --fill": "allow", "gh pr view 4": "allow", "gh pr merge 4 --squash": "allow",  # rules allow; scripts/merge_guard.py asks unless qualified
+            "gh pr merge 4 --admin": "allow",
             "git push -u origin claude/W-0006-x": "allow", "git push --force origin x": "deny",
             "git push origin main": "deny", "git branch feature": "allow", "git branch -D feature": "ask",
             "npm install": "allow", "npm publish": "ask", "npm token list": "deny",

@@ -5,7 +5,8 @@
       "repository": "etharic/ai-development-lab",
       "role": "control plane and experiment lab",
       "production": false,
-      "protected_branches": ["main"]
+      "protected_branches": ["main"],
+      "agent_merge": true
     }
   }
 }
