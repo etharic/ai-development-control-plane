@@ -4,7 +4,8 @@
 Run the Claude-led, GPT-5.6-assisted development control plane, then manage real projects with it.
 
 ## Current state
-- Control plane v2 on branch `control-plane-v2` (from `main`), awaiting owner review: W-0002.
+- Control plane v2 on branch `control-plane-v2` (from `main`), draft PR #4, awaiting owner review: W-0002. Includes high-autonomy Claude permissions and a git-push guard hook (W-0005).
+- `gh` CLI installed and authenticated (`etharic`). Claude opens and updates PRs itself.
 - Preserved, untouched: `experiment/5.6-sol-capability-audit` (draft PR #3, the v1 experiment control plane and lab service), `experiment/3-sustained-engineering`, `experiment/first-development-cycle`. v2 deliberately shares no files with v1.
 - No managed projects yet besides this repository.
 
