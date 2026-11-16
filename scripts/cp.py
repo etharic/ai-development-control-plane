@@ -440,9 +440,9 @@ def cmd_status(root: Path, hook: bool, project: str | None = None) -> int:
     try:  # surface dispatcher runs that stopped on an owner permission (W-0015)
         dstate = json.loads((state_dir(root) / "dispatcher" / "state.json").read_text(encoding="utf-8"))
         blocked = [k for k, v in (dstate.get("handled") or {}).items()
-                   if v.get("outcome") == "blocked" and not v.get("acknowledged")]
+                   if v.get("outcome") in ("blocked", "error", "ambiguous") and not v.get("acknowledged")]
         if blocked:
-            lines.append(f"!! dispatcher: {len(blocked)} run(s) stopped on an owner permission: {', '.join(blocked[:4])}"
+            lines.append(f"!! dispatcher: {len(blocked)} run(s) need the owner (blocked, error or ambiguous): {', '.join(blocked[:4])}"
                          " - `python scripts/dispatcher.py status`")
     except (OSError, ValueError):
         pass

@@ -15,9 +15,13 @@ Safety properties:
     `cp.py status`, and the same work is not relaunched.
   - Single-flight: one lock per state dir; a stale lock (dead PID or older than the run timeout) is
     recovered.
-  - Idempotent: every piece of work has a key (item id + item content hash, or PR number + head SHA).
-    A key is recorded as launched before Claude starts, so a crash or reboot never relaunches it.
-    `reset KEY` re-arms one deliberately.
+  - Idempotent: every piece of work has a key (item id + item content hash, or PR number + head SHA)
+    and a persisted launch state (reserved -> started -> done/blocked/error/ambiguous, or
+    spawn_failed). Only a definite spawn failure (Claude never started) re-arms automatically,
+    after backoff. Anything that may have run, including a crash mid-run, becomes `ambiguous` and is
+    never relaunched automatically. `reset KEY` re-arms one deliberately.
+  - One coherent snapshot: queue items from `origin/main` and claims from `origin/*` branch refs,
+    both from the same `git fetch --prune`; local branches and the local queue are ignored.
   - Fails quiet: an invalid control-plane state, a dirty checkout or a checkout off `main`
     prevents launching and is logged once per distinct problem; network errors back off
     exponentially with jitter.
@@ -32,10 +36,12 @@ import hashlib
 import json
 import os
 import random
+import re
+import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -83,7 +89,19 @@ def git_inputs(root: Path) -> dict:
             continue
         meta["_hash"] = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         items.append(meta)
-    return {"items": items, "claims": set(cp.claims(root).keys())}
+    return {"items": items, "claims": remote_claims(root)}
+
+
+def remote_claims(root: Path) -> set[str]:
+    """Claims from the same fetched snapshot as the queue: `origin/*` branch refs only (after fetch --prune).
+    Local branches, stale or unpushed, never count; claiming means pushing the branch (doctrine)."""
+    out = set()
+    refs = run(["git", "for-each-ref", "--format=%(refname)", "refs/remotes/origin/"], root).stdout.split()
+    for ref in refs:
+        m = re.match(r"^refs/remotes/origin/(?:claude|gpt)/(W-\d{4})(?:-|$)", ref)
+        if m:
+            out.add(m.group(1))
+    return out
 
 
 def gh_prs(repo: str, root: Path) -> list[dict]:
@@ -116,14 +134,41 @@ def allocation_mode(root: Path) -> str:
         return "UNKNOWN"
 
 
-def claude_runner(prompt: str, root: Path) -> dict:
-    r = run(["claude", "-p", prompt, "--output-format", "json", "--permission-mode", "dontAsk"],
-            root, timeout=RUN_TIMEOUT_S)
-    try:
-        out = json.loads(r.stdout)
-    except ValueError:
-        return {"is_error": True, "result": (r.stderr or r.stdout)[-500:], "permission_denials": []}
-    return out
+class SpawnFailed(Exception):
+    """Claude definitely did not start (no executable, OS refused to create the process)."""
+
+
+class AmbiguousRun(Exception):
+    """Claude may have started and done work, but the outcome is unknown (timeout, lost output)."""
+
+
+class ClaudeCLI:
+    """Two-phase runner so the dispatcher can tell 'never started' from 'started, outcome unknown'."""
+
+    def start(self, prompt: str, root: Path):
+        exe = shutil.which("claude")
+        if not exe:
+            raise SpawnFailed("claude CLI not found on PATH")
+        try:
+            return subprocess.Popen([exe, "-p", prompt, "--output-format", "json", "--permission-mode", "dontAsk"],
+                                    cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                    encoding="utf-8", errors="replace")
+        except OSError as e:
+            raise SpawnFailed(str(e)) from e
+
+    def pid(self, handle) -> int | None:
+        return getattr(handle, "pid", None)
+
+    def wait(self, handle) -> dict:
+        try:
+            out, err = handle.communicate(timeout=RUN_TIMEOUT_S)
+        except subprocess.TimeoutExpired as e:
+            handle.kill()
+            raise AmbiguousRun("Claude run exceeded the timeout and was stopped") from e
+        try:
+            return json.loads(out)
+        except ValueError as e:
+            raise AmbiguousRun(f"no parseable result (exit {handle.returncode}): {(err or out)[-300:]}") from e
 
 
 # ---------------------------------------------------------------- core
@@ -153,12 +198,12 @@ def find_work(inputs: dict, prs: list[dict], mode: str) -> list[dict]:
 
 class Dispatcher:
     def __init__(self, root: Path, *, inputs=git_inputs, prs=gh_prs, problems=local_problems,
-                 mode=allocation_mode, runner=claude_runner, clock=now, pid_alive=None, log_events=True):
+                 mode=allocation_mode, runner=None, clock=now, pid_alive=None, log_events=True):
         self.root = root
         self.dir = cp.state_dir(root) / "dispatcher"
         self.dir.mkdir(parents=True, exist_ok=True)
         self.inputs, self.prs, self.problems, self.mode = inputs, prs, problems, mode
-        self.runner, self.clock = runner, clock
+        self.runner, self.clock = runner or ClaudeCLI(), clock
         self.pid_alive = pid_alive or _pid_alive
         self.log_events = log_events
         reg = cp.load_json(root, "control/projects.json")["projects"]
@@ -211,10 +256,49 @@ class Dispatcher:
     def release(self) -> None:
         (self.dir / "lock").unlink(missing_ok=True)
 
+    # Launch state machine, persisted per work key:
+    #   (absent) -> reserved -> started -> done | blocked | error | ambiguous
+    #                        -> spawn_failed (re-armed automatically after retry_after)
+    # Only spawn_failed is retried automatically: Claude provably never ran. A key left in
+    # reserved/started by a crash (no live dispatcher holds the lock) becomes ambiguous: Claude may
+    # have run, so it is never relaunched automatically. The owner inspects it and uses `reset`.
+    IN_FLIGHT = ("reserved", "started")
+    NEEDS_OWNER = ("blocked", "error", "ambiguous")
+
+    def eligible(self, key: str, state: dict) -> bool:
+        entry = state["handled"].get(key)
+        if entry is None:
+            return True
+        if entry.get("outcome") == "spawn_failed":
+            retry = entry.get("retry_after")
+            return retry is not None and self.clock() >= datetime.fromisoformat(retry)
+        return False
+
+    def recover(self, state: dict) -> None:
+        """Called while holding the lock, so no run is in progress: in-flight keys are crash leftovers."""
+        stranded = [k for k, v in state["handled"].items() if v.get("outcome") in self.IN_FLIGHT]
+        for k in stranded:
+            state["handled"][k].update(outcome="ambiguous", recovered=self.clock().isoformat())
+        if stranded:
+            self.save(state)
+            self.log({"recovered_ambiguous": stranded})
+            self.event("owner_attention_blocked", f"dispatcher found runs interrupted mid-flight; "
+                                                   f"not relaunching: {stranded}")
+
     # one poll
     def poll(self, dry_run: bool = False) -> dict:
-        """Return {"action": "idle"|"launched"|"blocked-local"|"busy"|"dry-run", ...}. Raises on network errors."""
+        """Return {"action": "idle"|"launched"|"spawn-failed"|"ambiguous"|"blocked-local"|"busy"|"dry-run", ...}.
+        Raises on network errors (the caller backs off)."""
+        if not self.acquire():
+            return {"action": "busy"}
+        try:
+            return self._poll(dry_run)
+        finally:
+            self.release()
+
+    def _poll(self, dry_run: bool) -> dict:
         state = self.load()
+        self.recover(state)
         problems = self.problems(self.root)
         if problems:
             sig = "; ".join(problems)
@@ -229,37 +313,50 @@ class Dispatcher:
             self.save(state)
         mode = self.mode(self.root)
         work = find_work(self.inputs(self.root), self.prs(self.repo, self.root), mode)
-        new = [w for w in work if w["key"] not in state["handled"]]
+        new = [w for w in work if self.eligible(w["key"], state)]
         if not new:
             return {"action": "idle", "mode": mode}
+        keys = [w["key"] for w in new]
         if dry_run:
-            return {"action": "dry-run", "mode": mode, "work": [w["key"] for w in new]}
-        if not self.acquire():
-            return {"action": "busy"}
+            return {"action": "dry-run", "mode": mode, "work": keys}
+
+        def mark(**fields):
+            for k in keys:
+                state["handled"].setdefault(k, {}).update(fields)
+            self.save(state)
+
+        attempts = max(state["handled"].get(k, {}).get("attempts", 0) for k in keys) + 1
+        mark(outcome="reserved", reserved=self.clock().isoformat(), attempts=attempts)
+        self.log({"wake": keys, "mode": mode, "attempt": attempts})
         try:
-            started = self.clock().isoformat()
-            for w in new:  # record before launching: a crash must never cause a relaunch
-                state["handled"][w["key"]] = {"outcome": "launched", "started": started}
-            self.save(state)
-            self.log({"wake": [w["key"] for w in new], "mode": mode})
-            result = self.runner(PROMPT.format(work="\n".join(w["describe"] for w in new)), self.root)
-            denials = result.get("permission_denials") or []
-            outcome = "blocked" if denials else ("error" if result.get("is_error") else "done")
-            usage = result.get("usage") or {}
-            for w in new:
-                state["handled"][w["key"]].update(outcome=outcome, ended=self.clock().isoformat(),
-                                                  session=result.get("session_id"))
-            self.save(state)
-            self.log({"end": [w["key"] for w in new], "outcome": outcome, "turns": result.get("num_turns"),
-                      "output_tokens": usage.get("output_tokens"), "denials": len(denials)})
-            if denials:
-                what = ", ".join(sorted({str(d.get("tool_name", "?")) for d in denials}))
-                self.event("owner_attention_blocked", f"dispatcher run for {[w['key'] for w in new]} hit "
-                                                       f"{len(denials)} denied permission(s): {what}")
-            return {"action": "launched", "outcome": outcome, "work": [w["key"] for w in new],
-                    "summary": str(result.get("result", ""))[:1000]}
-        finally:
-            self.release()
+            handle = self.runner.start(PROMPT.format(work="\n".join(w["describe"] for w in new)), self.root)
+        except SpawnFailed as e:
+            retry = self.clock() + timedelta(seconds=next_delay(attempts, rng=lambda: 0.5))
+            mark(outcome="spawn_failed", error=str(e)[:300], retry_after=retry.isoformat())
+            self.log({"spawn_failed": keys, "error": str(e)[:300], "retry_after": retry.isoformat()})
+            if attempts == 1:
+                self.event("dispatcher-spawn-failed", f"{keys}: {e}")
+            return {"action": "spawn-failed", "work": keys, "error": str(e), "retry_after": retry.isoformat()}
+        mark(outcome="started", started=self.clock().isoformat(), pid=self.runner.pid(handle))
+        try:
+            result = self.runner.wait(handle)
+        except Exception as e:  # noqa: BLE001 - any failure after start is ambiguous: never auto-relaunch
+            mark(outcome="ambiguous", ended=self.clock().isoformat(), error=str(e)[:300])
+            self.log({"ambiguous": keys, "error": str(e)[:300]})
+            self.event("owner_attention_blocked", f"dispatcher run for {keys} ended ambiguously: {e}"[:500])
+            return {"action": "ambiguous", "work": keys, "error": str(e)}
+        denials = result.get("permission_denials") or []
+        outcome = "blocked" if denials else ("error" if result.get("is_error") else "done")
+        usage = result.get("usage") or {}
+        mark(outcome=outcome, ended=self.clock().isoformat(), session=result.get("session_id"))
+        self.log({"end": keys, "outcome": outcome, "turns": result.get("num_turns"),
+                  "output_tokens": usage.get("output_tokens"), "denials": len(denials)})
+        if denials:
+            what = ", ".join(sorted({str(d.get("tool_name", "?")) for d in denials}))
+            self.event("owner_attention_blocked", f"dispatcher run for {keys} hit "
+                                                   f"{len(denials)} denied permission(s): {what}")
+        return {"action": "launched", "outcome": outcome, "work": keys,
+                "summary": str(result.get("result", ""))[:1000]}
 
 
 def next_delay(failures: int, base: int = BASE_INTERVAL_S, rng=random.random) -> float:
@@ -317,7 +414,7 @@ def main(argv=None) -> int:
         if not entry:
             print("unknown key")
             return 1
-        if entry.get("outcome") == "blocked" and not entry.get("acknowledged"):
+        if entry.get("outcome") in Dispatcher.NEEDS_OWNER and not entry.get("acknowledged"):
             entry["acknowledged"] = True
             print("block acknowledged (the work stays handled; reset again to re-arm it)")
         else:
