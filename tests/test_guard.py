@@ -133,7 +133,9 @@ class PrecedenceTest(unittest.TestCase):
             "cargo test": "allow", "cargo publish": "ask", "python -m unittest": "allow",
             "python -m twine upload dist/x": "ask", "gh auth status": "allow", "gh auth token": "deny",
             "gh repo view": "prompt", "gh repo view x": "allow", "gh repo delete x --yes": "deny",
-            "gh api repos/x/y": "ask", "git credential fill": "deny", "rm -rf /": "deny",
+            "gh api repos/x/y": "allow",  # rules allow; scripts/gh_api_guard.py asks unless provably read-only
+            "gh api -X DELETE repos/x/y": "deny", "gh api repos/x/y -X DELETE": "deny", "gh api --method=DELETE repos/x/y": "deny",
+            "gh api -XDELETE repos/x/y": "deny", "gh api --method DELETE repos/x/y": "deny", "gh alias set m 'pr merge'": "ask", "gh extension install x/y": "ask", "git credential fill": "deny", "rm -rf /": "deny",
         }
         for cmd, want in table.items():
             self.assertEqual(decide(perms, cmd), want, cmd)

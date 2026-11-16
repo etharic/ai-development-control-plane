@@ -1,12 +1,22 @@
 {
   "schema_version": 1,
   "projects": {
+    "ai-development-control-plane": {
+      "repository": "etharic/ai-development-control-plane",
+      "role": "canonical control plane (public)",
+      "production": false,
+      "protected_branches": [
+        "main"
+      ],
+      "agent_merge": true
+    },
     "ai-development-lab": {
       "repository": "etharic/ai-development-lab",
-      "role": "control plane and experiment lab",
+      "role": "private historical lab and archive; not used for new work",
       "production": false,
-      "protected_branches": ["main"],
-      "agent_merge": true
+      "protected_branches": [
+        "main"
+      ]
     }
   }
 }

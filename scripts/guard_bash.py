@@ -30,6 +30,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gh_api_guard  # noqa: E402
 import merge_guard  # noqa: E402
 
 PROTECTED = frozenset({"main", "master", "production"})  # baseline, always protected
@@ -229,17 +230,24 @@ def check_command(command: str, cwd: str | None, resolve=implicit_targets,
 
 
 def check_gh(command: str, cwd: str | None, registry: dict, fetch=merge_guard.fetch_pr) -> tuple[str, str] | None:
-    """Merge policy and reviewer-marker protection. Return (decision, reason) or None."""
+    """Merge policy, reviewer-marker protection and read-only gh api. Return (decision, reason) or None."""
     if "gh" not in command:
         return None
     try:
         parsed = segments(command)
     except ValueError:
-        if re.search(r"(^|[\s;&|(])gh(\.exe)?\s+pr\s+(merge|comment|review|create|edit)\b", strip_heredocs(command)):
-            return "ask", "could not parse a gh pr command"
+        if re.search(r"(^|[\s;&|(])gh(\.exe)?\s+(pr\s+(merge|comment|review|create|edit)|api)\b", strip_heredocs(command)):
+            return "ask", "could not parse a gh pr/api command"
         return None
     for words, seg in _simple_commands(parsed, cwd):
-        if words[0] not in ("gh", "gh.exe") or words[1:2] != ["pr"] or len(words) < 3:
+        if words[0] not in ("gh", "gh.exe"):
+            continue
+        if words[1:2] == ["api"]:
+            why = gh_api_guard.classify(words[2:])
+            if why:
+                return "ask", f"gh api is not provably read-only ({why})"
+            continue
+        if words[1:2] != ["pr"] or len(words) < 3:
             continue
         sub, rest = words[2], words[3:]
         if sub == "merge":

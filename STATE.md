@@ -1,4 +1,4 @@
-# State: ai-development-lab
+# State: ai-development-control-plane
 
 ## Goal
 Run the Claude-led, GPT-5.6-assisted development control plane, then manage real projects with it.
