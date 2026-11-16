@@ -1,5 +1,10 @@
 """Qualified agent merge policy for `gh pr merge` (docs/OPERATING_MODEL.md "Qualified agent merge").
 
+STATUS: advisory. GPT-5.6's W-0008 review showed a Bash PreToolUse hook cannot be an authorization
+boundary while interpreters are allowed (they can run gh as a child process), so `gh pr merge` stays an
+owner-confirmed ask rule and this module only informs that prompt. W-0009 tracks a non-bypassable
+enforcement point (separate, non-admin Claude identity + GitHub-side required check).
+
 Called by guard_bash.py. The guard only restricts: a qualifying merge passes through to the normal
 permission rules; anything else returns a decision of "ask" (owner approves the Red action
 in the prompt) or "deny" (never allowed). Every uncertainty fails closed to "ask".

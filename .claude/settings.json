@@ -59,6 +59,7 @@
       "Bash(git reflog expire *)", "Bash(git gc --prune*)",
       "Bash(git worktree remove *)",
 
+      "Bash(gh pr merge)", "Bash(gh pr merge *)",
       "Bash(gh api *)",
       "Bash(gh repo create *)",
       "Bash(gh run rerun *)", "Bash(gh run cancel *)", "Bash(gh workflow run *)",

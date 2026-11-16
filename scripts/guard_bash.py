@@ -246,6 +246,10 @@ def check_gh(command: str, cwd: str | None, registry: dict, fetch=merge_guard.fe
             result = merge_guard.evaluate(rest, seg, registry, fetch)
             if result:
                 return result
+            # Advisory until W-0009: a command-surface hook cannot stop allowed interpreters
+            # (python, node, ...) from running gh as a child process, so it is not an
+            # authorization boundary. The owner confirms every merge; the verdict informs the click.
+            return "ask", "qualifies under the agent-merge policy, but merges stay owner-confirmed until W-0009"
         elif sub in ("comment", "review", "create", "edit"):
             if any(merge_guard.impersonates(b) for b in merge_guard.body_texts(rest, seg)):
                 return "deny", ("a merge marker block posted by Claude must be signed "
@@ -291,7 +295,7 @@ def main(argv=None) -> int:
             return 2
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse", "permissionDecision": "ask",
-            "permissionDecisionReason": f"Not a qualified agent merge: {why}. Owner approval required."}}))
+            "permissionDecisionReason": f"Merge guard: {why}. Owner approval required."}}))
     return 0
 
 

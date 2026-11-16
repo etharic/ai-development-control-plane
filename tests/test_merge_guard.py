@@ -108,7 +108,9 @@ class GuardIntegrationTest(unittest.TestCase):
         return guard_bash.check_gh(cmd, cwd, REGISTRY, fetch=lambda s, r, c: the_pr)
 
     def test_merge_inside_compound_command_is_checked(self):
-        self.assertIsNone(self.check(f"gh pr merge 7 --squash --match-head-commit {HEAD}"))
+        qualified = self.check(f"gh pr merge 7 --squash --match-head-commit {HEAD}")
+        self.assertEqual(qualified[0], "ask")  # advisory until W-0009: the owner still confirms
+        self.assertIn("qualifies", qualified[1])
         self.assertEqual(self.check(f"git fetch && gh pr merge 7 --match-head-commit {HEAD}",
                                     pr(isDraft=True))[0], "ask")
         self.assertEqual(self.check("gh pr merge 7 --admin")[0], "deny")
@@ -138,6 +140,23 @@ class GuardIntegrationTest(unittest.TestCase):
                                 input=json.dumps({**payload, "tool_input": {"command": "gh pr merge 1 --admin"}}),
                                 capture_output=True, text=True)
         self.assertEqual(denied.returncode, 2)
+
+
+class NoAutonomousMergeUntilEnforcedTest(unittest.TestCase):
+    """W-0008 regression: no configuration path may let `gh pr merge` run without the owner."""
+
+    def test_merge_is_never_unprompted(self):
+        settings = json.loads((REPO / ".claude" / "settings.json").read_text(encoding="utf-8"))
+        self.assertIn("Bash(gh pr merge *)", settings["permissions"]["ask"])
+        self.assertIn("Bash(gh pr merge)", settings["permissions"]["ask"])
+        for kind in ("allow", "ask", "deny"):
+            for rule in settings["permissions"][kind]:
+                if kind == "allow":
+                    self.assertFalse(rule.startswith("Bash(gh pr merge"), rule)
+        # even a fully qualified merge yields an owner prompt from the hook
+        result = guard_bash.check_gh(f"gh pr merge 7 --match-head-commit {HEAD}", None, REGISTRY,
+                                     fetch=lambda s, r, c: PR)
+        self.assertEqual(result[0], "ask")
 
 
 class RegistryPolicyTest(unittest.TestCase):

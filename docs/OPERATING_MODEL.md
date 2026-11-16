@@ -33,7 +33,7 @@ All work lives in `control/queue/W-NNNN.md` on `main` of this repository (frontm
 
 - **Status in the file:** `ready`, `blocked`, `done`, `cancelled`. Only the lead (Claude) changes status, except owner items the owner confirms.
 - **Claimed = a branch exists.** An agent claims an item by creating `claude/W-NNNN-slug` or `gpt/W-NNNN-slug` in the target repository. Branch prefix is ownership: one writer per branch, no lease files. A claim with no commits for 48 h is stale and may be reclaimed after checking the branch.
-- **Review = a PR exists.** Delegated work ends in a draft PR titled `W-NNNN: <title>`. Claude reviews it locally (`git fetch`, `git diff`), then requests changes, merges it as a qualified agent merge (below), or leaves the merge to the owner.
+- **Review = a PR exists.** Delegated work ends in a draft PR titled `W-NNNN: <title>`. Claude reviews it locally (`git fetch`, `git diff`), then requests changes or prepares the merge. The merge itself is owner-confirmed until W-0009 ("Qualified agent merge" below).
 - **Claude opportunity queue** = `ready` items with `assignee: claude`, by priority. GPT-5.6 may *propose* Claude items in its PR body; Claude adds them.
 
 `python scripts/cp.py status` prints the queue with derived claim state; it runs automatically at Claude session start.
@@ -62,10 +62,14 @@ Use the cheapest *representative* proof: review → ChatGPT sandbox tests → lo
 ## Action classes
 - **Green (autonomous):** read anything in allowed repositories; edit own branches; run local/sandbox tests; commit; open draft PRs; update operational state.
 - **Yellow (autonomous within the item's scope, always noted in the PR):** dependency changes, CI/workflow changes, migrations not run against production, metered-resource use.
-- **Red (owner approval each time):** production deploy/release; merge to a protected branch unless it is a qualified agent merge (below); destructive data operations; spending or paid-service activation; credential, security or account changes; irreversible deletion (including branches); device actions only the owner can do.
+- **Red (owner approval each time):** production deploy/release; merge to a protected branch (qualified agent merges, below, become autonomous only with W-0009 enforcement); destructive data operations; spending or paid-service activation; credential, security or account changes; irreversible deletion (including branches); device actions only the owner can do.
 
 ## Qualified agent merge
-Owner decision 2026-11-16 (W-0007): merges in non-production repositories need no owner click when every condition holds. `scripts/merge_guard.py` (run by the `guard_bash.py` PreToolUse hook) checks them through authenticated `gh` and fails closed. Anything unproven turns `gh pr merge` into an owner prompt, and `--admin` is always denied.
+Owner decision 2026-11-16 (W-0007): merges in non-production repositories should need no owner click when every condition below holds.
+
+**Status: advisory until W-0009.** GPT-5.6's W-0008 review found a Bash hook cannot enforce this. Allowed interpreters (`python`, `node`, ...) can run `gh` as a child process the hook never sees, and Claude's `gh` uses the owner's admin token, so GitHub cannot tell its merges from the owner's. Until a non-bypassable enforcement point exists, every `gh pr merge` is an owner-confirmed ask rule. `scripts/merge_guard.py` checks the conditions and states the verdict in the prompt; `--admin` is denied outright. Agents must never invoke a merge any other way.
+
+Conditions:
 - The project is registered with `production: false` and `agent_merge: true` (`cp.py validate` rejects `agent_merge` on production projects).
 - The PR targets one of the project's `protected_branches` and has no `owner-merge` label.
 - The PR is not a draft. GitHub reports `mergeable: MERGEABLE` and `mergeStateStatus` CLEAN (or HAS_HOOKS). No status check is failing or pending.
