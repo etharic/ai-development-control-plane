@@ -25,6 +25,32 @@ Agents never change GitHub or account settings (owner decision 2026-11-16). This
 
 6. **Optional, strengthens agent merges:** give GPT-5.6 its own GitHub identity (a machine user or GitHub App restricted to delegated repositories) so its reviews are authenticated rather than attested. Then the merge guard can also require the reviewer's GitHub login.
 
+## Applied posture: `etharic/ai-development-control-plane` (2026-11-16, W-0001)
+Applied by Claude on the owner's explicit authorization, using repository-scoped settings only, on GitHub Free with a public repository. Verified by reading the settings back from GitHub (`rules/branches/main` and each setting's endpoint).
+
+| Control | Setting | Threat addressed |
+|---|---|---|
+| Ruleset `protect-main` (default branch) | Require a PR (0 approvals: solo owner), dismiss stale reviews on push, require conversation resolution, merge methods merge/squash; block force pushes; block deletion. **No bypass actors**, admins included. | 2 (unprotected default branch), 3 (injection pushing directly to `main`). No bypass means Claude, which uses the owner's token, can't skip the PR path either. |
+| Ruleset `protect-tags` (all tags) | Block tag deletion, update and force-update; no bypass | Releases are Red actions; published tags can't be silently moved. |
+| Secret scanning and push protection | Enabled (GitHub default for public repositories) | 4 (secrets in commits): pushes containing known secret formats are rejected. |
+| Dependabot alerts | Enabled | Vulnerable dependencies. The repository is standard-library-only today, so this is a tripwire. |
+| Private vulnerability reporting | Enabled | Lets outside researchers report privately instead of in public issues. |
+| GitHub Actions | **Disabled** for the repository | No workflows exist. Disabling removes fork-PR workflow and token-abuse surface until a reviewed workflow (e.g. W-0009's `merge-gate`) is added; then re-enable with read-only token permissions (already the default) and approval required for outside contributors. |
+| Merge settings | Auto-merge off; rebase merge off (merge commits keep `Agent:`/`Work-Item:` provenance); delete-branch-on-merge off (branch deletion is a Red action) | Keeps merges deliberate and provenance intact. |
+| Wiki, Projects | Disabled | They were unused, and the wiki is an unreviewed content surface. |
+
+Not available, or not applied:
+- **Secret-scanning extras.** Non-provider patterns and validity checks: GitHub accepted the request but left them disabled for this repository, so they aren't offered here. No paid feature was enabled.
+- **Dependabot security updates** (auto-PRs). Not enabled: there are no dependencies, and Actions is off.
+- **Code scanning (CodeQL).** Not enabled: it needs Actions. Reconsider when Actions is re-enabled.
+- **Owner-only, account-level items** (not repository-scoped, so not changed):
+  - restrict the ChatGPT GitHub app to selected repositories (checklist item 1);
+  - set the Actions spending limit to $0 (checklist item 4);
+  - a separate identity for GPT-5.6 or Claude (checklist item 6, W-0009).
+- Issues stay enabled. Their content is untrusted input and never authorizes actions (threat 3).
+
+Effect on the workflow: every change to `main`, including operational state, goes through a PR, and agents merge only with the owner's confirmation (`gh pr merge` is an ask rule). The local guards remain defence in depth; this ruleset is the enforced boundary.
+
 ## Already in the repository
 - `.claude/settings.json` (Claude Code permissions; rules are evaluated deny → ask → allow, so a specific `ask`/`deny` such as `gh api *` or `gh repo delete *` wins over a broad `allow`; `tests/test_guard.py` `PrecedenceTest` pins the expected decision for representative commands):
   - **allow** without prompting: routine git (status/diff/log, branch, switch, add, commit, stash, merge/rebase, push), `gh pr`/`gh issue` and read-only `gh repo`/`run`/`workflow`/`release`, Python/Node/Rust toolchains and dependency installs, ordinary filesystem commands, edits inside the repository, `WebFetch`/`WebSearch`. GitHub access goes through the authenticated `gh` CLI, never raw tokens.
