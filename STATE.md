@@ -4,9 +4,9 @@
 Run the Claude-led, GPT-5.6-assisted development control plane, then manage real projects with it.
 
 ## Current state
-- Control plane v2 on branch `control-plane-v2` (from `main`), draft PR #4, awaiting owner review: W-0002. Includes high-autonomy Claude permissions and a git-push guard hook (W-0005).
+- Control plane v2 is on `main` (PR #4 merged 2026-11-16, f37d1fd, owner-authorized). It includes high-autonomy Claude permissions, the git-push guard, managed-project install and the advisory merge guard.
 - `gh` CLI installed and authenticated (`etharic`). Claude opens and updates PRs itself.
-- Qualified agent merges (W-0007): policy is implemented but advisory. GPT-5.6's W-0008 review showed a local hook can't enforce it, so every merge stays owner-confirmed. Real enforcement is W-0009 (owner: separate non-admin Claude identity, then a GitHub-side check). PR #4 passed GPT-5.6 re-review W-0010 at c79fd26 and is ready for the owner's merge.
+- Qualified agent merges (W-0007): policy is implemented but advisory. GPT-5.6's W-0008 review showed a local hook can't enforce it, so every merge stays owner-confirmed. Real enforcement is W-0009 (owner: separate non-admin Claude identity, then a GitHub-side check).
 - Preserved, untouched: `experiment/5.6-sol-capability-audit` (draft PR #3, the v1 experiment control plane and lab service), `experiment/3-sustained-engineering`, `experiment/first-development-cycle`. v2 deliberately shares no files with v1.
 - No managed projects yet besides this repository.
 
@@ -19,4 +19,4 @@ Run the Claude-led, GPT-5.6-assisted development control plane, then manage real
 6. Allocation thresholds are experimental defaults.
 
 ## Next action
-Owner: W-0002 (review/merge), then W-0001 (security settings) and W-0003 (ChatGPT Project). Claude: bootstrap the first real project with `templates/PROJECT_BOOTSTRAP.md`.
+Owner: W-0001 (GitHub security settings, including protecting `main`), W-0003 (ChatGPT Project from the current `AGENTS.md`), W-0009 decision (enforced agent merges, or keep merges owner-confirmed). Claude: bootstrap the first real project with `templates/PROJECT_BOOTSTRAP.md`.
