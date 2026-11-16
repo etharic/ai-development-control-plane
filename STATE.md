@@ -4,12 +4,13 @@
 Run the Claude-led, GPT-5.6-assisted development control plane, then manage real projects with it.
 
 ## Current state
-- Control plane v2 is on `main` (PR #4 merged 2026-11-16, f37d1fd, owner-authorized). It includes high-autonomy Claude permissions, the git-push guard, managed-project install and the advisory merge guard.
-- `gh` CLI installed and authenticated (`etharic`). Claude opens and updates PRs itself.
-- Qualified agent merges (W-0007): policy is implemented but advisory. GPT-5.6's W-0008 review showed a local hook can't enforce it, so every merge stays owner-confirmed. Real enforcement is W-0009 (owner: separate non-admin Claude identity, then a GitHub-side check).
-- Preserved, untouched: `experiment/5.6-sol-capability-audit` (draft PR #3, the v1 experiment control plane and lab service), `experiment/3-sustained-engineering`, `experiment/first-development-cycle`. v2 deliberately shares no files with v1.
+- **Canonical:** this public repository, `etharic/ai-development-control-plane`. `etharic/ai-development-lab` is the private historical archive (old experiments, pre-publication history); don't use it for new work.
+- `main` is protected by GitHub rulesets with no bypass: PR required, no force push, no deletion, protected tags. Secret scanning and push protection, Dependabot alerts and private vulnerability reporting are on; Actions is off (`docs/SECURITY.md` "Applied posture").
+- Commit identity: noreply only. The owner enabled GitHub email privacy on 2026-11-16, and merges since then are verified noreply. The personal email remains reachable only through closed PR #2's ref (purge needs GitHub Support).
+- Claude permissions: routine development without prompts, including provably read-only `gh api` (W-0013). Merges, releases, deploys, credentials and settings stay owner-gated.
+- Qualified agent merges (W-0007) remain advisory. The enforced design is native GitHub review with a separate non-admin machine account for Claude (`docs/AGENT_IDENTITY.md`, W-0009), awaiting owner setup.
+- Telemetry and allowance readings are machine-local (`.local/`, gitignored).
 - No managed projects yet besides this repository.
-- Public release (W-0011, owner-confirmed 2026-11-16): the audited, rewritten history is on branch `public/main` and goes to a new public repository after GPT-5.6's audit (W-0012). This repository stays private. Telemetry and allowance readings are machine-local (`.local/`).
 
 ## Durable decisions (2026-11-16, owner)
 1. Operational state may eventually be committed directly; doctrine and scripts need reviewed PRs.
@@ -20,4 +21,8 @@ Run the Claude-led, GPT-5.6-assisted development control plane, then manage real
 6. Allocation thresholds are experimental defaults.
 
 ## Next action
-Owner: W-0001 (GitHub security settings, including protecting `main`), W-0003 (ChatGPT Project from the current `AGENTS.md`), W-0009 decision (enforced agent merges, or keep merges owner-confirmed). Claude: bootstrap the first real project with `templates/PROJECT_BOOTSTRAP.md`.
+- Owner (one-time, account-level):
+  - W-0009 steps in `docs/AGENT_IDENTITY.md` (machine account for Claude);
+  - W-0001 remainder (scope the ChatGPT GitHub app to selected repositories; Actions spending limit $0);
+  - W-0003 (ChatGPT Project from the current `AGENTS.md`).
+- Claude: after W-0009, apply the review ruleset and verify it. Then bootstrap the first real project with `templates/PROJECT_BOOTSTRAP.md` once the owner names it.
