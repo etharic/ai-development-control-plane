@@ -9,6 +9,7 @@ Run the Claude-led, GPT-5.6-assisted development control plane, then manage real
 - Qualified agent merges (W-0007): policy is implemented but advisory. GPT-5.6's W-0008 review showed a local hook can't enforce it, so every merge stays owner-confirmed. Real enforcement is W-0009 (owner: separate non-admin Claude identity, then a GitHub-side check).
 - Preserved, untouched: `experiment/5.6-sol-capability-audit` (draft PR #3, the v1 experiment control plane and lab service), `experiment/3-sustained-engineering`, `experiment/first-development-cycle`. v2 deliberately shares no files with v1.
 - No managed projects yet besides this repository.
+- Public release (W-0011, owner-confirmed 2026-11-16): the audited, rewritten history is on branch `public/main` and goes to a new public repository after GPT-5.6's audit (W-0012). This repository stays private. Telemetry and allowance readings are machine-local (`.local/`).
 
 ## Durable decisions (2026-11-16, owner)
 1. Operational state may eventually be committed directly; doctrine and scripts need reviewed PRs.
