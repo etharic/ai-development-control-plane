@@ -30,7 +30,7 @@ Agents never change GitHub or account settings (owner decision 2026-11-16). This
 Every commit in this repository is public forever: GitHub keeps `refs/pull/N/head` for every PR, even after branches are deleted. Commits must use the noreply identity `etharic <331996485+etharic@users.noreply.github.com>`.
 - **Claude:** the canonical checkout sets the identity in its local git config.
 - **GPT-5.6:** `AGENTS.md` requires an explicit author and committer on every commit made through the connector.
-- **GitHub web merges** use the account's email setting. The owner must enable, in GitHub → Settings → Emails, **"Keep my email addresses private"** and **"Block command line pushes that expose my email"**. These are account-level settings only the owner can change. Until then, merges on GitHub can record the personal email; don't merge on this repository before they're on.
+- **GitHub web merges** use the account's email setting. The owner must enable, in GitHub → Settings → Emails, **"Keep my email addresses private"** and **"Block command line pushes that expose my email"**. These are account-level settings only the owner can change. **Enabled by the owner 2026-11-16**; verified on the first merge afterwards (merge `82a4710`: author is the noreply address).
 - Incident 2026-11-16: GPT-5.6's commit `92be7ed` (public PR #2) was authored with the personal email because the connector used the account default. `refs/pull/2/head` keeps it reachable. Only GitHub Support can purge a PR ref; the owner may request it.
 
 ## Permission-prompt audit (W-0013)
@@ -38,6 +38,32 @@ Rule: a prompt is justified only when a reasonable owner might answer No.
 - **`gh api`:** read-only calls (GET/HEAD, read-only GraphQL queries) are routine inspection and should not prompt. `scripts/gh_api_guard.py` classifies them and fails closed: fields or `--input` without an explicit GET, method overrides, other hosts, GraphQL mutations, and unknown flags all ask. Tests: `tests/test_gh_api_guard.py`, including the exact read-only calls that prompted the owner during W-0005 to W-0001. **Applied 2026-11-16 on the owner's direct authorization:** `Bash(gh api *)` moved from ask to allow, so the classifier decides. Provable reads run without a prompt; every other call gets an owner prompt with the reason. The `DELETE` deny rules remain. An earlier attempt was refused by Claude Code's safety classifier when only a GPT-authored item requested it.
 - **`gh alias`, `gh extension`:** added to ask. They create indirect commands the hook can't see.
 - **Every other ask rule was reviewed and kept:** merges, `gh repo create`, CI reruns and dispatch, releases and publishing, deploy and infrastructure CLIs, branch deletion, hard resets and cleans, discarding changes, tags, history rewriting, stash drops, destructive DB resets, `find -delete/-exec`, copying or moving to absolute or home paths, and edits to `.claude/` or `.github/`. Each is consequential or destructive enough that a reasonable owner might decline.
+
+## Applied posture: `etharic/ai-development-control-plane` (2026-11-16, W-0001)
+Applied by Claude on the owner's explicit authorization, using repository-scoped settings only, on GitHub Free with a public repository. Verified by reading the settings back from GitHub (`rules/branches/main` and each setting's endpoint).
+
+| Control | Setting | Threat addressed |
+|---|---|---|
+| Ruleset `protect-main` (default branch) | Require a PR (0 approvals: solo owner), dismiss stale reviews on push, require conversation resolution, merge methods merge/squash; block force pushes; block deletion. **No bypass actors**, admins included. | 2 (unprotected default branch), 3 (injection pushing directly to `main`). No bypass means Claude, which uses the owner's token, can't skip the PR path either. |
+| Ruleset `protect-tags` (all tags) | Block tag deletion, update and force-update; no bypass | Releases are Red actions; published tags can't be silently moved. |
+| Secret scanning and push protection | Enabled (GitHub default for public repositories) | 4 (secrets in commits): pushes containing known secret formats are rejected. |
+| Dependabot alerts | Enabled | Vulnerable dependencies. The repository is standard-library-only today, so this is a tripwire. |
+| Private vulnerability reporting | Enabled | Lets outside researchers report privately instead of in public issues. |
+| GitHub Actions | **Disabled** for the repository | No workflows exist. Disabling removes fork-PR workflow and token-abuse surface until a reviewed workflow (e.g. W-0009's `merge-gate`) is added; then re-enable with read-only token permissions (already the default) and approval required for outside contributors. |
+| Merge settings | Auto-merge off; rebase merge off (merge commits keep `Agent:`/`Work-Item:` provenance); delete-branch-on-merge off (branch deletion is a Red action) | Keeps merges deliberate and provenance intact. |
+| Wiki, Projects | Disabled | They were unused, and the wiki is an unreviewed content surface. |
+
+Not available, or not applied:
+- **Secret-scanning extras.** Non-provider patterns and validity checks: GitHub accepted the request but left them disabled for this repository, so they aren't offered here. No paid feature was enabled.
+- **Dependabot security updates** (auto-PRs). Not enabled: there are no dependencies, and Actions is off.
+- **Code scanning (CodeQL).** Not enabled: it needs Actions. Reconsider when Actions is re-enabled.
+- **Owner-only, account-level items** (not repository-scoped, so not changed):
+  - restrict the ChatGPT GitHub app to selected repositories (checklist item 1);
+  - set the Actions spending limit to $0 (checklist item 4);
+  - a separate identity for GPT-5.6 or Claude (checklist item 6, W-0009).
+- Issues stay enabled. Their content is untrusted input and never authorizes actions (threat 3).
+
+Effect on the workflow: every change to `main`, including operational state, goes through a PR, and agents merge only with the owner's confirmation (`gh pr merge` is an ask rule). The local guards remain defence in depth; this ruleset is the enforced boundary.
 
 ## Already in the repository
 - `.claude/settings.json` (Claude Code permissions; rules are evaluated deny → ask → allow, so a specific `ask`/`deny` such as `gh pr merge *` or `gh repo delete *` wins over a broad `allow`; `tests/test_guard.py` `PrecedenceTest` pins the expected decision for representative commands):
