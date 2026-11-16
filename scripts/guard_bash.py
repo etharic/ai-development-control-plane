@@ -10,18 +10,27 @@ and blocks (exit 2, reason on stderr) when it would:
   - push everything (--all, --mirror),
   - target a protected branch (explicitly, or implicitly via the current branch or @{push}).
 
+Protected branches = the baseline below plus the project's `protected_branches` in
+control/projects.json (`--project NAME`; glob patterns such as `release/*` allowed).
+An unknown project or unreadable registry keeps the baseline and says so on stderr.
+
 It is defence in depth next to GitHub branch protection (docs/SECURITY.md), not a sandbox.
 Any other command is allowed through to the normal permission rules.
 """
 from __future__ import annotations
 
+import argparse
+import fnmatch
 import json
+import os
 import re
 import shlex
 import subprocess
 import sys
+from pathlib import Path
 
-PROTECTED = {"main", "master", "production"}
+PROTECTED = frozenset({"main", "master", "production"})  # baseline, always protected
+LAB_ROOT = Path(os.environ.get("CP_ROOT") or Path(__file__).resolve().parents[1])
 FORCE_FLAGS = {"--force", "-f", "--force-with-lease", "--force-if-includes"}
 DELETE_FLAGS = {"--delete", "-d", "--prune"}
 BULK_FLAGS = {"--all", "--mirror", "--branches"}
@@ -60,7 +69,27 @@ def implicit_targets(cwd: str | None) -> set[str]:
     return targets
 
 
-def check_push(args: list[str], cwd: str | None, resolve=implicit_targets) -> str | None:
+def load_protected(project: str | None, root: Path = LAB_ROOT) -> tuple[frozenset, str | None]:
+    """Baseline plus the registered project's protected branches; second value is a warning."""
+    if not project:
+        return PROTECTED, None
+    try:
+        reg = json.loads((root / "control" / "projects.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        return PROTECTED, f"cannot read project registry ({e}); baseline protection only"
+    entry = (reg.get("projects") or {}).get(project)
+    if not entry:
+        return PROTECTED, f"project {project!r} not registered; baseline protection only"
+    extra = [b for b in entry.get("protected_branches") or [] if isinstance(b, str) and b]
+    return PROTECTED | frozenset(extra), None
+
+
+def _hits(targets: set[str], protected) -> list[str]:
+    return sorted(t for t in targets if any(fnmatch.fnmatchcase(t, pat) for pat in protected))
+
+
+def check_push(args: list[str], cwd: str | None, resolve=implicit_targets,
+               protected=PROTECTED) -> str | None:
     """Return a refusal reason for `git push <args>`, or None if allowed."""
     positional, skip = [], False
     for a in args:
@@ -83,9 +112,9 @@ def check_push(args: list[str], cwd: str | None, resolve=implicit_targets) -> st
 
     refspecs = positional[1:]  # first positional is the remote
     if not refspecs:
-        hit = resolve(cwd) & PROTECTED
+        hit = _hits(resolve(cwd), protected)
         if hit:
-            return f"refspec-less push would update protected branch `{sorted(hit)[0]}`"
+            return f"refspec-less push would update protected branch `{hit[0]}`"
         return None
     for spec in refspecs:
         if spec.startswith("+"):
@@ -95,9 +124,9 @@ def check_push(args: list[str], cwd: str | None, resolve=implicit_targets) -> st
             return f"deleting remote ref `{spec}` is blocked"
         dst = dst or src
         targets = resolve(cwd) if _branch(dst) == "HEAD" else {_branch(dst)}
-        hit = targets & PROTECTED
+        hit = _hits(targets, protected)
         if hit:
-            return f"direct push to protected branch `{sorted(hit)[0]}` is blocked; open a PR"
+            return f"direct push to protected branch `{hit[0]}` is blocked; open a PR"
     return None
 
 
@@ -119,7 +148,8 @@ def segments(command: str) -> list[list[str]]:
     return out
 
 
-def check_command(command: str, cwd: str | None, resolve=implicit_targets) -> str | None:
+def check_command(command: str, cwd: str | None, resolve=implicit_targets,
+                  protected=PROTECTED) -> str | None:
     if "push" not in command:
         return None
     try:
@@ -147,13 +177,18 @@ def check_command(command: str, cwd: str | None, resolve=implicit_targets) -> st
             else:
                 i += 1
         if i < len(words) and words[i] == "push":
-            reason = check_push(words[i + 1:], seg_cwd, resolve)
+            reason = check_push(words[i + 1:], seg_cwd, resolve, protected)
             if reason:
                 return reason
     return None
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description="PreToolUse git-push guard")
+    ap.add_argument("--project", help="registered project whose protected_branches apply")
+    ap.add_argument("--root", type=Path, default=LAB_ROOT, help="control-plane repository")
+    args = ap.parse_args(argv)
+    protected, warning = load_protected(args.project, args.root)
     try:
         payload = json.load(sys.stdin)
     except (ValueError, OSError):
@@ -161,7 +196,11 @@ def main() -> int:
     if payload.get("tool_name") != "Bash":
         return 0
     command = (payload.get("tool_input") or {}).get("command") or ""
-    reason = check_command(command, payload.get("cwd"))
+    reason = check_command(command, payload.get("cwd"), protected=protected)
+    if reason and warning:
+        reason += f" ({warning})"
+    elif warning and "push" in command:
+        print(f"control-plane guard: {warning}", file=sys.stderr)
     if reason:
         print(f"Blocked by control-plane guard (scripts/guard_bash.py): {reason}. "
               "Protected-branch merges and destructive pushes are Red actions for the owner.", file=sys.stderr)

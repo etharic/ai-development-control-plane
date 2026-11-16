@@ -191,6 +191,16 @@ def validate_events(events: list[dict]) -> list[str]:
     return errors
 
 
+def validate_projects(reg: dict) -> list[str]:
+    """Each project must declare protected_branches: the push guard enforces exactly this list."""
+    errors = []
+    for name, p in (reg.get("projects") or {}).items():
+        pb = p.get("protected_branches") if isinstance(p, dict) else None
+        if not isinstance(pb, list) or not pb or not all(isinstance(b, str) and b.strip() for b in pb):
+            errors.append(f"control/projects.json: {name}: protected_branches must be a non-empty list of branch names/globs")
+    return errors
+
+
 def validate(root: Path) -> list[str]:
     errors = []
     try:
@@ -199,7 +209,9 @@ def validate(root: Path) -> list[str]:
     except (OSError, ValueError) as e:
         errors.append(f"control/resources.json: {e}")
     try:
-        projects = set((load_json(root, "control/projects.json").get("projects") or {}).keys())
+        reg = load_json(root, "control/projects.json")
+        errors += validate_projects(reg)
+        projects = set((reg.get("projects") or {}).keys())
     except (OSError, ValueError) as e:
         errors.append(f"control/projects.json: {e}")
         projects = set()
@@ -327,11 +339,13 @@ def cmd_mode(root: Path) -> int:
     return 0
 
 
-def cmd_status(root: Path, hook: bool) -> int:
+def cmd_status(root: Path, hook: bool, project: str | None = None) -> int:
     if hook:
         sys.stdin.read()  # hook payload unused; drain it
     now = now_utc()
     lines = ["# Control plane status"]
+    if project and project != DEFAULT_PROJECT:
+        lines.append(f"managed project: {project} (control plane: {root}; queue items with project: {project})")
     errors = validate(root)
     if errors:
         lines.append(f"!! INVALID STATE ({len(errors)} errors) - run `python scripts/cp.py validate`")
@@ -461,6 +475,69 @@ def cmd_log(root: Path, args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------- managed-project install
+
+LOCAL_SETTINGS = Path(".claude") / "settings.local.json"
+
+
+def project_settings(root: Path, project: str) -> dict:
+    """Claude Code settings for a managed project: the lab's permission policy plus hooks that
+    call this control plane by absolute path. Machine-specific, so it goes in settings.local.json."""
+    lab = json.loads((root / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    py = "python"  # same interpreter convention as the lab's own hooks
+    scripts = (root / "scripts").resolve().as_posix()
+    croot = root.resolve().as_posix()
+
+    def cmd(script, *args):
+        return " ".join([py, f'"{scripts}/{script}"', *args])
+
+    return {
+        "permissions": lab["permissions"],
+        "hooks": {
+            "SessionStart": [{"hooks": [{"type": "command", "timeout": 30, "command":
+                cmd("cp.py", "--root", f'"{croot}"', "status", "--hook", "--project", project)}]}],
+            "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "timeout": 15, "command":
+                cmd("guard_bash.py", "--root", f'"{croot}"', "--project", project)}]}],
+            "SessionEnd": [{"hooks": [{"type": "command", "timeout": 60, "command":
+                cmd("cp.py", "--root", f'"{croot}"', "record-session", "--hook", "--project", project)}]}],
+        },
+        "statusLine": {"type": "command", "command": cmd("statusline.py")},
+    }
+
+
+def cmd_install_project(root: Path, args) -> int:
+    reg = load_json(root, "control/projects.json").get("projects") or {}
+    if args.project not in reg:
+        print(f"project {args.project!r} is not registered in control/projects.json; register it first")
+        return 1
+    repo = Path(args.repo).resolve()
+    if git(repo, "rev-parse", "--is-inside-work-tree").strip() != "true":
+        print(f"{repo} is not a git work tree")
+        return 1
+    if repo == root.resolve():
+        print("the control-plane repository uses its own committed .claude/settings.json")
+        return 1
+    target = repo / LOCAL_SETTINGS
+    content = json.dumps(project_settings(root, args.project), indent=2) + "\n"
+    if target.exists() and target.read_text(encoding="utf-8") != content and not args.force:
+        print(f"{target} exists with different content; inspect it, then rerun with --force to replace it")
+        return 1
+    if args.dry_run:
+        print(content, end="")
+        return 0
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8", newline="\n")
+    # keep the machine-specific file out of the project's history without touching tracked files
+    rel = LOCAL_SETTINGS.as_posix()
+    if subprocess.run(["git", "-C", str(repo), "check-ignore", "-q", rel]).returncode != 0:
+        exclude = Path(git(repo, "rev-parse", "--absolute-git-dir").strip()) / "info" / "exclude"
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        with exclude.open("a", encoding="utf-8", newline="\n") as f:
+            f.write(f"\n{rel}\n")
+    print(f"installed control-plane settings for {args.project} at {target}")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="control-plane tool")
     ap.add_argument("--root", type=Path, default=ROOT)
@@ -469,6 +546,12 @@ def main(argv=None) -> int:
     sub.add_parser("mode")
     st = sub.add_parser("status")
     st.add_argument("--hook", action="store_true")
+    st.add_argument("--project")
+    ip = sub.add_parser("install-project", help="wire a managed project's Claude sessions to this control plane")
+    ip.add_argument("repo", help="path to the managed project's git checkout")
+    ip.add_argument("--project", required=True, help="name registered in control/projects.json")
+    ip.add_argument("--force", action="store_true", help="replace an existing, different settings.local.json")
+    ip.add_argument("--dry-run", action="store_true")
     me = sub.add_parser("measure")
     me.add_argument("--from-statusline", action="store_true")
     me.add_argument("--weekly-used", type=float)
@@ -494,7 +577,9 @@ def main(argv=None) -> int:
     if args.cmd == "mode":
         return cmd_mode(root)
     if args.cmd == "status":
-        return cmd_status(root, args.hook)
+        return cmd_status(root, args.hook, args.project)
+    if args.cmd == "install-project":
+        return cmd_install_project(root, args)
     if args.cmd == "measure":
         return cmd_measure(root, args)
     if args.cmd == "record-session":

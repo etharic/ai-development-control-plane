@@ -245,5 +245,83 @@ class ControlStateTests(unittest.TestCase):
         self.assertIsNone(lim["claude_five_hour"])
 
 
+    def test_projects_must_declare_protected_branches(self):
+        self.assertEqual(cp.validate_projects({"projects": {"a": {"protected_branches": ["main"]}}}), [])
+        for bad in ({}, {"protected_branches": []}, {"protected_branches": [""]}, {"protected_branches": "main"}):
+            self.assertEqual(len(cp.validate_projects({"projects": {"a": bad}})), 1, bad)
+
+
+class InstallProjectTest(unittest.TestCase):
+    """A second local repository wired to a copy of the control plane, hooks executed for real."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(rmtree, self.tmp)
+        self.lab = self.tmp / "lab"
+        for rel in ("control/resources.json", "control/queue/_TEMPLATE.md", ".claude/settings.json"):
+            (self.lab / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(REPO / rel, self.lab / rel)
+        shutil.copytree(REPO / "scripts", self.lab / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
+        (self.lab / "telemetry").mkdir()
+        (self.lab / "telemetry" / "events.jsonl").write_text("", encoding="utf-8")
+        reg = json.loads((REPO / "control/projects.json").read_text(encoding="utf-8"))
+        reg["projects"]["fixture"] = {"repository": "o/fixture", "role": "test", "production": True,
+                                      "protected_branches": ["main", "stable"]}
+        (self.lab / "control/projects.json").write_text(json.dumps(reg), encoding="utf-8")
+        self.repo = self.tmp / "fixture"
+        self.repo.mkdir()
+        g = ["git", "-C", str(self.repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+        subprocess.run(g + ["init", "-q", "-b", "feature"], check=True)
+        subprocess.run(g + ["commit", "-q", "--allow-empty", "-m", "init"], check=True)
+
+    def install(self, *extra, project="fixture"):
+        with redirect_stdout(io.StringIO()) as out:
+            code = cp.main(["--root", str(self.lab), "install-project", str(self.repo), "--project", project, *extra])
+        return code, out.getvalue()
+
+    def hook(self, settings, event, payload):
+        entry = settings["hooks"][event][0]["hooks"][0]["command"]
+        return subprocess.run(entry, shell=True, cwd=self.repo, input=json.dumps(payload),
+                              capture_output=True, text=True, timeout=60)
+
+    def test_install_wires_hooks_policy_and_ignore(self):
+        code, out = self.install()
+        self.assertEqual(code, 0, out)
+        settings = json.loads((self.repo / ".claude" / "settings.local.json").read_text(encoding="utf-8"))
+        lab = json.loads((self.lab / ".claude/settings.json").read_text(encoding="utf-8"))
+        self.assertEqual(settings["permissions"], lab["permissions"])
+        for event in ("SessionStart", "PreToolUse", "SessionEnd"):
+            cmd = settings["hooks"][event][0]["hooks"][0]["command"]
+            self.assertIn(self.lab.resolve().as_posix(), cmd)
+            self.assertIn("--project fixture", cmd)
+        self.assertEqual(subprocess.run(["git", "-C", str(self.repo), "check-ignore", "-q",
+                                         ".claude/settings.local.json"]).returncode, 0)
+
+        def push(command):
+            return self.hook(settings, "PreToolUse", {"tool_name": "Bash", "cwd": str(self.repo),
+                                                      "tool_input": {"command": command}})
+        blocked = push("git push origin stable")  # protected only by this project's registration
+        self.assertEqual(blocked.returncode, 2, blocked.stderr)
+        self.assertIn("stable", blocked.stderr)
+        self.assertEqual(push("git push -u origin feature").returncode, 0)
+        status = self.hook(settings, "SessionStart", {})
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertIn("managed project: fixture", status.stdout)
+
+    def test_idempotent_refuses_to_clobber_and_requires_registration(self):
+        self.assertEqual(self.install()[0], 0)
+        self.assertEqual(self.install()[0], 0)
+        path = self.repo / ".claude" / "settings.local.json"
+        path.write_text("{}", encoding="utf-8")
+        code, out = self.install()
+        self.assertEqual(code, 1)
+        self.assertIn("--force", out)
+        self.assertEqual(path.read_text(encoding="utf-8"), "{}")
+        self.assertEqual(self.install("--force")[0], 0)
+        self.assertEqual(self.install(project="unregistered")[0], 1)
+        exclude = (self.repo / ".git" / "info" / "exclude").read_text(encoding="utf-8")
+        self.assertEqual(exclude.count(".claude/settings.local.json"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

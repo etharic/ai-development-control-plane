@@ -110,5 +110,62 @@ class SettingsTest(unittest.TestCase):
                 self.assertFalse(rule.endswith(":*)"), f"trailing `:*` is legacy prefix syntax: {rule}")
 
 
+def decide(perms, command):
+    """Model of Claude Code's documented precedence for Bash rules: deny > ask > allow > prompt."""
+    import fnmatch
+    for kind in ("deny", "ask", "allow"):
+        for rule in perms[kind]:
+            if rule.startswith("Bash(") and fnmatch.fnmatchcase(command, rule[5:-1]):
+                return kind
+    return "prompt"
+
+
+class PrecedenceTest(unittest.TestCase):
+    def test_specific_rules_beat_broad_allows(self):
+        perms = json.loads((REPO / ".claude" / "settings.json").read_text(encoding="utf-8"))["permissions"]
+        table = {
+            "gh pr create --draft --fill": "allow", "gh pr view 4": "allow", "gh pr merge 4 --squash": "ask",
+            "git push -u origin claude/W-0006-x": "allow", "git push --force origin x": "deny",
+            "git push origin main": "deny", "git branch feature": "allow", "git branch -D feature": "ask",
+            "npm install": "allow", "npm publish": "ask", "npm token list": "deny",
+            "cargo test": "allow", "cargo publish": "ask", "python -m unittest": "allow",
+            "python -m twine upload dist/x": "ask", "gh auth status": "allow", "gh auth token": "deny",
+            "gh repo view": "prompt", "gh repo view x": "allow", "gh repo delete x --yes": "deny",
+            "gh api repos/x/y": "ask", "git credential fill": "deny", "rm -rf /": "deny",
+        }
+        for cmd, want in table.items():
+            self.assertEqual(decide(perms, cmd), want, cmd)
+
+
+class ProjectPolicyTest(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.root = Path(tempfile.mkdtemp())
+        (self.root / "control").mkdir()
+        (self.root / "control" / "projects.json").write_text(json.dumps({"schema_version": 1, "projects": {
+            "app": {"repository": "o/app", "role": "r", "production": True,
+                    "protected_branches": ["stable", "release/*"]}}}), encoding="utf-8")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_registered_branches_are_protected(self):
+        prot, warn = guard_bash.load_protected("app", self.root)
+        self.assertIsNone(warn)
+        for cmd in ["git push origin stable", "git push origin HEAD:release/2.0", "git push origin main"]:
+            self.assertIn("protected", guard_bash.check_command(cmd, None, on("feat"), prot), cmd)
+        self.assertIn("protected", guard_bash.check_command("git push", None, on("stable"), prot))
+        self.assertIsNone(guard_bash.check_command("git push origin releases-notes", None, on("feat"), prot))
+
+    def test_unknown_project_keeps_baseline_and_warns(self):
+        prot, warn = guard_bash.load_protected("nope", self.root)
+        self.assertEqual(prot, guard_bash.PROTECTED)
+        self.assertIn("not registered", warn)
+        prot, warn = guard_bash.load_protected("app", self.root / "missing")
+        self.assertEqual(prot, guard_bash.PROTECTED)
+        self.assertIn("cannot read", warn)
+
+
 if __name__ == "__main__":
     unittest.main()
