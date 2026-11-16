@@ -133,8 +133,38 @@ def check_push(args: list[str], cwd: str | None, resolve=implicit_targets,
     return None
 
 
+HEREDOC = re.compile(r"(?<!<)<<(-?)[ \t]*(['\"]?)([A-Za-z_][\w.-]*)\2")
+SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "pwsh", "powershell", "cmd", "xargs"}
+
+
+def strip_heredocs(command: str) -> str:
+    """Drop here-document bodies: they are stdin data (commit messages, file contents), not commands.
+    Bodies fed to a shell interpreter on the same line (`bash <<EOF`, `cat <<EOF | sh`) are kept,
+    because their lines do execute. An unterminated body runs to the end, as in bash."""
+    out, pending, keep = [], [], False
+    for line in command.split("\n"):
+        if pending:
+            strip_tabs, delim = pending[0]
+            if (line.lstrip("\t") if strip_tabs else line) == delim:
+                pending.pop(0)
+                if keep:
+                    out.append(line)
+            elif keep:
+                out.append(line)
+            continue
+        out.append(line)
+        found = HEREDOC.findall(line)
+        if found:
+            pending = [(dash == "-", delim) for dash, _, delim in found]
+            head = HEREDOC.sub(" ", line)
+            words = re.split(r"[\s;&|()]+", head)
+            keep = any(w in SHELLS for w in words)
+    return "\n".join(out)
+
+
 def segments(command: str) -> list[list[str]]:
     """Split a shell command into simple commands, respecting quotes (raises ValueError if unbalanced)."""
+    command = strip_heredocs(command)
     lex = shlex.shlex(command, posix=True, punctuation_chars=OPERATOR_CHARS)
     lex.whitespace = " \t\r"
     lex.whitespace_split = True
@@ -184,7 +214,7 @@ def check_command(command: str, cwd: str | None, resolve=implicit_targets,
     try:
         parsed = segments(command)
     except ValueError:
-        if re.search(r"(^|[\s;&|(])git(\.exe)?\s+(-\S+\s+)*push\b", command):
+        if re.search(r"(^|[\s;&|(])git(\.exe)?\s+(-\S+\s+)*push\b", strip_heredocs(command)):
             return "could not parse a git push command; run it in a simpler form"
         return None
     for words, seg in _simple_commands(parsed, cwd):
@@ -205,7 +235,7 @@ def check_gh(command: str, cwd: str | None, registry: dict, fetch=merge_guard.fe
     try:
         parsed = segments(command)
     except ValueError:
-        if re.search(r"(^|[\s;&|(])gh(\.exe)?\s+pr\s+(merge|comment|review|create|edit)\b", command):
+        if re.search(r"(^|[\s;&|(])gh(\.exe)?\s+pr\s+(merge|comment|review|create|edit)\b", strip_heredocs(command)):
             return "ask", "could not parse a gh pr command"
         return None
     for words, seg in _simple_commands(parsed, cwd):
