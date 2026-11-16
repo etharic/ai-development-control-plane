@@ -90,5 +90,34 @@ class HookIntegrationTest(unittest.TestCase):
         self.assertIsNone(self.check("git commit -F - <<'EOF'\ngh api -X DELETE repos/o/r\nEOF"))
 
 
+class SettingsTest(unittest.TestCase):
+    """W-0013 (owner-authorized 2026-11-16): gh api is allowed by rule; the hook asks for non-reads."""
+
+    def test_rules(self):
+        import json
+        perms = json.loads((REPO / ".claude" / "settings.json").read_text(encoding="utf-8"))["permissions"]
+        self.assertIn("Bash(gh api *)", perms["allow"])
+        self.assertNotIn("Bash(gh api *)", perms["ask"])
+        for rule in ("Bash(gh alias *)", "Bash(gh extension *)", "Bash(gh pr merge *)"):
+            self.assertIn(rule, perms["ask"])
+        for rule in ("Bash(gh api * -X DELETE*)", "Bash(gh api * --method DELETE*)"):
+            self.assertIn(rule, perms["deny"])
+
+    def test_hook_entrypoint_asks_for_writes(self):
+        import json
+        import subprocess
+        out = subprocess.run([sys.executable, str(REPO / "scripts" / "guard_bash.py")],
+                             input=json.dumps({"tool_name": "Bash", "cwd": str(REPO), "tool_input":
+                                               {"command": "gh api -X PATCH repos/o/r -F has_wiki=false"}}),
+                             capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(json.loads(out.stdout)["hookSpecificOutput"]["permissionDecision"], "ask")
+        ok = subprocess.run([sys.executable, str(REPO / "scripts" / "guard_bash.py")],
+                            input=json.dumps({"tool_name": "Bash", "cwd": str(REPO), "tool_input":
+                                              {"command": "gh api repos/o/r/rulesets --jq '.[].id'"}}),
+                            capture_output=True, text=True)
+        self.assertEqual((ok.returncode, ok.stdout.strip()), (0, ""))
+
+
 if __name__ == "__main__":
     unittest.main()

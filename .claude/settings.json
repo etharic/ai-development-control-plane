@@ -31,6 +31,7 @@
       "Bash(gh workflow list *)", "Bash(gh workflow view *)",
       "Bash(gh release list *)", "Bash(gh release view *)",
       "Bash(gh label list *)", "Bash(gh search *)",
+      "Bash(gh api *)",
 
       "Bash(python *)", "Bash(python3 *)", "Bash(py *)",
       "Bash(pip *)", "Bash(pip3 *)", "Bash(uv *)", "Bash(poetry *)",
@@ -60,7 +61,7 @@
       "Bash(git worktree remove *)",
 
       "Bash(gh pr merge)", "Bash(gh pr merge *)",
-      "Bash(gh api *)",
+      "Bash(gh alias *)", "Bash(gh extension *)",
       "Bash(gh repo create *)",
       "Bash(gh run rerun *)", "Bash(gh run cancel *)", "Bash(gh workflow run *)",
       "Bash(gh release create *)", "Bash(gh release edit *)", "Bash(gh release upload *)",
@@ -101,6 +102,9 @@
       "Bash(gh repo delete *)", "Bash(gh repo archive *)", "Bash(gh repo rename *)", "Bash(gh repo edit *)",
       "Bash(gh release delete *)", "Bash(gh issue delete *)", "Bash(gh ruleset *)",
       "Bash(gh api * -X DELETE*)", "Bash(gh api * --method DELETE*)",
+      "Bash(gh api -X DELETE*)", "Bash(gh api --method DELETE*)",
+      "Bash(gh api -XDELETE*)", "Bash(gh api * -XDELETE*)",
+      "Bash(gh api --method=DELETE*)", "Bash(gh api * --method=DELETE*)",
       "Bash(npm login*)", "Bash(npm adduser*)", "Bash(npm token *)", "Bash(npm owner *)", "Bash(npm access *)",
       "Bash(cargo login*)", "Bash(cargo owner *)",
       "Bash(cmdkey *)", "Bash(security find-*)", "Bash(printenv*)",
