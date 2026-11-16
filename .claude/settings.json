@@ -3,31 +3,126 @@
     "allow": [
       "Bash(python scripts/cp.py *)",
       "Bash(python scripts/claude_usage.py *)",
-      "Bash(python -m unittest *)",
-      "Bash(git status *)",
-      "Bash(git diff *)",
-      "Bash(git log *)",
-      "Bash(git show *)",
-      "Bash(git fetch *)",
-      "Bash(git branch --show-current)"
+
+      "Bash(git status)", "Bash(git status *)",
+      "Bash(git diff)", "Bash(git diff *)",
+      "Bash(git log)", "Bash(git log *)",
+      "Bash(git show)", "Bash(git show *)",
+      "Bash(git fetch)", "Bash(git fetch *)",
+      "Bash(git pull)", "Bash(git pull *)",
+      "Bash(git branch)", "Bash(git branch *)",
+      "Bash(git switch *)", "Bash(git checkout *)",
+      "Bash(git add *)", "Bash(git commit *)",
+      "Bash(git restore *)", "Bash(git rm *)", "Bash(git mv *)",
+      "Bash(git stash)", "Bash(git stash *)",
+      "Bash(git merge *)", "Bash(git rebase *)", "Bash(git cherry-pick *)",
+      "Bash(git push)", "Bash(git push *)",
+      "Bash(git remote -v)", "Bash(git remote show *)",
+      "Bash(git rev-parse *)", "Bash(git ls-files *)", "Bash(git ls-remote *)",
+      "Bash(git blame *)", "Bash(git grep *)", "Bash(git describe *)",
+      "Bash(git worktree *)", "Bash(git config --get *)", "Bash(git tag --list *)",
+
+      "Bash(gh auth status)",
+      "Bash(gh status *)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(gh repo view *)", "Bash(gh repo clone *)", "Bash(gh repo list *)",
+      "Bash(gh run list *)", "Bash(gh run view *)", "Bash(gh run watch *)",
+      "Bash(gh workflow list *)", "Bash(gh workflow view *)",
+      "Bash(gh release list *)", "Bash(gh release view *)",
+      "Bash(gh label list *)", "Bash(gh search *)",
+
+      "Bash(python *)", "Bash(python3 *)", "Bash(py *)",
+      "Bash(pip *)", "Bash(pip3 *)", "Bash(uv *)", "Bash(poetry *)",
+      "Bash(pytest *)", "Bash(ruff *)", "Bash(black *)", "Bash(mypy *)",
+
+      "Bash(node *)", "Bash(npm *)", "Bash(npx *)", "Bash(pnpm *)", "Bash(yarn *)",
+      "Bash(tsc *)", "Bash(eslint *)", "Bash(prettier *)",
+
+      "Bash(cargo *)", "Bash(rustc *)", "Bash(rustup *)",
+
+      "Bash(cd *)", "Bash(ls *)", "Bash(pwd)", "Bash(mkdir *)", "Bash(touch *)",
+      "Bash(cp *)", "Bash(mv *)",
+      "Bash(wc *)", "Bash(find *)", "Bash(which *)",
+
+      "Edit(./**)",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "ask": [
+      "Bash(git branch -D *)", "Bash(git branch -d *)", "Bash(git branch --delete *)",
+      "Bash(git branch * -D *)", "Bash(git branch * -d *)",
+      "Bash(git reset --hard *)", "Bash(git clean *)",
+      "Bash(git checkout -- *)", "Bash(git restore --source *)",
+      "Bash(git stash drop *)", "Bash(git stash clear)",
+      "Bash(git tag *)", "Bash(git filter-branch *)", "Bash(git filter-repo *)",
+      "Bash(git reflog expire *)", "Bash(git gc --prune*)",
+      "Bash(git worktree remove *)",
+
+      "Bash(gh pr merge *)",
+      "Bash(gh api *)",
+      "Bash(gh repo create *)",
+      "Bash(gh run rerun *)", "Bash(gh run cancel *)", "Bash(gh workflow run *)",
+      "Bash(gh release create *)", "Bash(gh release edit *)", "Bash(gh release upload *)",
+
+      "Bash(npm publish*)", "Bash(npm unpublish*)", "Bash(npm deprecate *)",
+      "Bash(pnpm publish*)", "Bash(yarn publish*)", "Bash(yarn npm publish*)",
+      "Bash(cargo publish*)", "Bash(cargo yank *)",
+      "Bash(uv publish*)", "Bash(poetry publish*)", "Bash(twine *)", "Bash(python -m twine *)",
+      "Bash(docker push *)", "Bash(vercel *)", "Bash(netlify *)", "Bash(fly *)", "Bash(flyctl *)",
+      "Bash(kubectl *)", "Bash(helm *)", "Bash(terraform *)", "Bash(pulumi *)",
+      "Bash(dropdb *)", "Bash(npx prisma migrate reset*)", "Bash(npx prisma db push*)",
+
+      "Bash(find * -delete*)", "Bash(find * -exec *)",
+      "Bash(cp * /*)", "Bash(mv * /*)", "Bash(cp * ~*)", "Bash(mv * ~*)",
+
+      "Edit(./.claude/**)",
+      "Edit(./.github/**)"
     ],
     "deny": [
-      "Bash(git push --force *)",
-      "Bash(git push -f *)",
-      "Bash(git push --force-with-lease *)",
-      "Bash(git push origin main)",
-      "Bash(git push origin main *)",
+      "Bash(git push --force*)", "Bash(git push -f*)", "Bash(git push --force-with-lease*)",
+      "Bash(git push * --force*)", "Bash(git push * -f)", "Bash(git push * -f *)",
+      "Bash(git push * --force-with-lease*)", "Bash(git push * +*)",
+      "Bash(git push --mirror*)", "Bash(git push * --mirror*)",
+      "Bash(git push --all*)", "Bash(git push * --all*)",
+      "Bash(git push origin main)", "Bash(git push origin main *)",
+      "Bash(git push * main)", "Bash(git push *:main)", "Bash(git push *:main *)",
+      "Bash(git push * master)", "Bash(git push *:master)",
       "Bash(git push origin HEAD:main *)",
-      "Bash(git push --delete *)",
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./**/*.pem)",
-      "Read(./**/*.key)"
+      "Bash(git push --delete *)", "Bash(git push * --delete *)", "Bash(git push * -d *)",
+
+      "Bash(git credential *)", "Bash(git credential-manager *)", "Bash(git credential-store *)",
+      "Bash(git config * credential.helper *)", "Bash(git config --global *)", "Bash(git config --system *)",
+
+      "Bash(gh auth token*)", "Bash(gh auth status -t*)", "Bash(gh auth status --show-token*)",
+      "Bash(gh auth login*)", "Bash(gh auth logout*)", "Bash(gh auth refresh*)",
+      "Bash(gh auth switch*)", "Bash(gh auth setup-git*)",
+      "Bash(gh secret *)", "Bash(gh ssh-key *)", "Bash(gh gpg-key *)",
+      "Bash(gh repo delete *)", "Bash(gh repo archive *)", "Bash(gh repo rename *)", "Bash(gh repo edit *)",
+      "Bash(gh release delete *)", "Bash(gh issue delete *)", "Bash(gh ruleset *)",
+      "Bash(gh api * -X DELETE*)", "Bash(gh api * --method DELETE*)",
+      "Bash(npm login*)", "Bash(npm adduser*)", "Bash(npm token *)", "Bash(npm owner *)", "Bash(npm access *)",
+      "Bash(cargo login*)", "Bash(cargo owner *)",
+      "Bash(cmdkey *)", "Bash(security find-*)", "Bash(printenv*)",
+
+      "Bash(rm -rf /*)", "Bash(rm -rf ~*)", "Bash(rm -rf ..*)", "Bash(rm -rf $HOME*)",
+
+      "Read(**/.env)", "Read(**/.env.*)",
+      "Read(**/*.pem)", "Read(**/*.key)", "Read(**/*.p12)", "Read(**/*.pfx)", "Read(**/*.kdbx)",
+      "Read(**/id_rsa*)", "Read(**/id_ed25519*)", "Read(**/id_ecdsa*)",
+      "Read(~/.ssh/**)", "Read(~/.aws/**)", "Read(~/.azure/**)", "Read(~/.kube/**)", "Read(~/.docker/config.json)",
+      "Read(~/.git-credentials)", "Read(~/.netrc)", "Read(~/_netrc)", "Read(~/.npmrc)", "Read(~/.pypirc)",
+      "Read(~/.cargo/credentials*)", "Read(~/.config/gh/**)", "Read(~/AppData/Roaming/GitHub CLI/**)",
+      "Read(~/.password-store/**)", "Read(~/.gnupg/**)",
+      "Edit(./.git/**)"
     ]
   },
   "hooks": {
     "SessionStart": [
       { "hooks": [ { "type": "command", "command": "python scripts/cp.py status --hook", "timeout": 30 } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "python scripts/guard_bash.py", "timeout": 15 } ] }
     ],
     "SessionEnd": [
       { "hooks": [ { "type": "command", "command": "python scripts/cp.py record-session --hook", "timeout": 60 } ] }

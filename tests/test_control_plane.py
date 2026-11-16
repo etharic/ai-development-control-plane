@@ -231,6 +231,8 @@ class ControlStateTests(unittest.TestCase):
         res["resources"]["claude_weekly"].update(used_percent=10, measured_at=(NOW - timedelta(hours=3)).isoformat(),
                                                  source="owner-usage-command",
                                                  resets_at=(NOW + timedelta(days=2)).isoformat())
+        # isolate from whatever five-hour reading the real repository state carries
+        res["resources"]["claude_five_hour"].update(used_percent=None, measured_at=None, resets_at=None)
         snap = self.root / "limits.json"
         snap.write_text(json.dumps({"measured_at": (NOW - timedelta(minutes=2)).isoformat(),
                                     "source": "claude-code-statusline",

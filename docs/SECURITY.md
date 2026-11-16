@@ -21,9 +21,14 @@ Agents never change GitHub or account settings (owner decision 2026-11-16). This
    - **Option A (simplest):** let only Claude's local git push to `main`. Add a ruleset that requires PRs for everything except paths `control/queue/**`, `control/resources.json`, `telemetry/**`, `STATE.md`. GitHub rulesets support file-path restrictions on some plans; if not available on yours, use option B.
    - **Option B:** keep `main` PR-only and let operational state ride along in Claude's next PR.
 
-   Then remove the `git push origin main` deny rules from `.claude/settings.json` via a reviewed PR.
+   Then remove the `main` push deny rules from `.claude/settings.json` and `main` from `PROTECTED` in `scripts/guard_bash.py` via a reviewed PR.
 
 ## Already in the repository
-- `.claude/settings.json`: denies force-push, pushing to `main`, and reading `.env*`, `*.pem`, `*.key`; allows only read-only git and the control-plane scripts without prompting.
+- `.claude/settings.json` (Claude Code permissions; rules are evaluated deny → ask → allow):
+  - **allow** without prompting: routine git (status/diff/log, branch, switch, add, commit, stash, merge/rebase, push), `gh pr`/`gh issue` and read-only `gh repo`/`run`/`workflow`/`release`, Python/Node/Rust toolchains and dependency installs, ordinary filesystem commands, edits inside the repository, `WebFetch`/`WebSearch`. GitHub access goes through the authenticated `gh` CLI, never raw tokens.
+  - **ask** (owner approves each time, i.e. Red/Yellow): `gh pr merge`, `gh api`, releases and package publishing, deploy/infra CLIs, CI reruns/dispatch, branch deletion, `git reset --hard`/`clean`, tags, history rewriting, destructive DB resets, copying or moving to absolute/home paths, editing `.claude/` or `.github/`.
+  - **deny**: force pushes and pushes to `main`/`master`, remote ref deletion, `git credential*`, global/system git config, `gh auth token`/login/logout/refresh/setup-git, `gh secret`/`ssh-key`/`gpg-key`/`ruleset`, repository delete/archive/rename/edit, registry login/token/owner commands, `printenv`, `rm -rf` of root/home/parent, reading `.env*`, keys, certificates and the usual credential stores (`~/.ssh`, `~/.aws`, gh config, `.git-credentials`, `.netrc`, `.npmrc`, `.pypirc`, cargo credentials, password stores), writing into `.git/`.
+- `scripts/guard_bash.py` (PreToolUse hook on Bash): parses every `git ... push` (including `git -C dir push`, chained commands and refspecs) and blocks force, `+refspec`, deletes, `--all`/`--mirror`, and any push whose target is `main`, `master` or `production`, explicitly or implicitly via the current branch or its `@{push}` upstream. Permission globs match prefixes only; the hook covers what they can't (for example a bare `git push` while on `main`).
+- Limits, stated plainly: allowing `python`, `node` and package managers means Claude can run arbitrary project code, which could read files the `Read` deny rules protect. The deny rules, the hook and Claude's own doctrine reduce accidental or injected misuse. They are not a sandbox. GitHub branch protection (checklist item 2) is the enforced boundary.
 - `.gitignore`: secrets, caches, local databases.
 - No GitHub Actions workflows in this repository.
