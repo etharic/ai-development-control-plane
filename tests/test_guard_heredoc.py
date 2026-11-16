@@ -79,7 +79,7 @@ class HeredocTest(unittest.TestCase):
     def test_hook_passes_incident_command(self):
         payload = {"tool_name": "Bash", "cwd": str(REPO), "tool_input": {"command": INCIDENT}}
         out = subprocess.run([sys.executable, str(REPO / "scripts" / "guard_bash.py"),
-                              "--project", "ai-development-lab"],
+                              "--project", "ai-development-control-plane"],
                              input=json.dumps(payload), capture_output=True, text=True)
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertEqual(out.stdout.strip(), "", "no ask decision for an ordinary commit + feature push")

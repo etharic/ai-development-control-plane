@@ -161,7 +161,7 @@ class ControlStateTests(unittest.TestCase):
 
     def item(self, iid, **fields):
         meta = {"id": iid, "title": "t", "assignee": "gpt56", "status": "ready", "priority": "2",
-                "project": "ai-development-lab", "created": "2026-11-16"}
+                "project": "ai-development-control-plane", "created": "2026-11-16"}
         meta.update(fields)
         body = "---\n" + "".join(f"{k}: {v}\n" for k, v in meta.items()) + "---\n## Objective\n"
         (self.root / "control" / "queue" / f"{iid}.md").write_text(body, encoding="utf-8")
